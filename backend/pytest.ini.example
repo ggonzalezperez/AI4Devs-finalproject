@@ -1,0 +1,18 @@
+; Configuración local de pytest para TDD Guard.
+;
+; Copia este fichero a `backend/pytest.ini` y pon la ruta ABSOLUTA a la raíz del
+; repositorio (la carpeta que contiene `backend/` y `frontend/`). `pytest.ini`
+; está en .gitignore precisamente para no commitear rutas de tu máquina.
+;
+;   cp backend/pytest.ini.example backend/pytest.ini
+;
+; Ojo: cuando existe `pytest.ini`, pytest IGNORA por completo la sección
+; [tool.pytest.ini_options] de pyproject.toml, así que este fichero debe repetir
+; también `pythonpath`.
+;
+; Si la ruta es inválida, el reporter cae a la carpeta actual y TDD Guard no
+; encontrará los resultados: los hooks bloquearán por falta de contexto de tests.
+
+[pytest]
+pythonpath = .
+tdd_guard_project_root = /ruta/absoluta/a/chispa

@@ -1,0 +1,276 @@
+diff --git a/frontend/package-lock.json b/frontend/package-lock.json
+index ead80af..087ae98 100644
+--- a/frontend/package-lock.json
++++ b/frontend/package-lock.json
+@@ -1,18 +1,19 @@
+ {
+   "name": "chispa-frontend",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "chispa-frontend",
+       "dependencies": {
++        "qrcode.react": "^4.2.0",
+         "react": "^18.3.1",
+         "react-dom": "^18.3.1",
+         "react-router-dom": "^6.26.0"
+       },
+       "devDependencies": {
+         "@testing-library/jest-dom": "^6.4.8",
+         "@testing-library/react": "^16.0.0",
+         "@testing-library/user-event": "^14.5.2",
+         "@types/react": "^18.3.3",
+         "@types/react-dom": "^18.3.0",
+@@ -2613,20 +2614,29 @@
+     "node_modules/punycode": {
+       "version": "2.3.1",
+       "resolved": "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz",
+       "integrity": "sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==",
+       "dev": true,
+       "license": "MIT",
+       "engines": {
+         "node": ">=6"
+       }
+     },
++    "node_modules/qrcode.react": {
++      "version": "4.2.0",
++      "resolved": "https://registry.npmjs.org/qrcode.react/-/qrcode.react-4.2.0.tgz",
++      "integrity": "sha512-QpgqWi8rD9DsS9EP3z7BT+5lY5SFhsqGjpgW5DY/i3mK4M9DTBNz3ErMi8BWYEfI3L0d8GIbGmcdFAS1uIRGjA==",
++      "license": "ISC",
++      "peerDependencies": {
++        "react": "^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0"
++      }
++    },
+     "node_modules/querystringify": {
+       "version": "2.2.0",
+       "resolved": "https://registry.npmjs.org/querystringify/-/querystringify-2.2.0.tgz",
+       "integrity": "sha512-FIqgj2EUvTa7R50u0rGsyTftzjYmv/a3hO345bZNrqabNqjtgiDMgmo4mkUjd+nzU5oF3dClKqFIPUKybUyqoQ==",
+       "dev": true,
+       "license": "MIT"
+     },
+     "node_modules/react": {
+       "version": "18.3.1",
+       "resolved": "https://registry.npmjs.org/react/-/react-18.3.1.tgz",
+diff --git a/frontend/package.json b/frontend/package.json
+index bb4df3a..dfda0f8 100644
+--- a/frontend/package.json
++++ b/frontend/package.json
+@@ -3,20 +3,21 @@
+   "private": true,
+   "type": "module",
+   "scripts": {
+     "dev": "vite",
+     "build": "tsc -b && vite build",
+     "preview": "vite preview",
+     "test": "vitest run",
+     "lint": "tsc --noEmit"
+   },
+   "dependencies": {
++    "qrcode.react": "^4.2.0",
+     "react": "^18.3.1",
+     "react-dom": "^18.3.1",
+     "react-router-dom": "^6.26.0"
+   },
+   "devDependencies": {
+     "@testing-library/jest-dom": "^6.4.8",
+     "@testing-library/react": "^16.0.0",
+     "@testing-library/user-event": "^14.5.2",
+     "@types/react": "^18.3.3",
+     "@types/react-dom": "^18.3.0",
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index 786eb17..de8a52e 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -6,34 +6,36 @@ import Login from "./screens/Login";
+ import AddExplorer from "./screens/AddExplorer";
+ import WhoExplores from "./screens/WhoExplores";
+ import ChildAccess from "./screens/ChildAccess";
+ import Spark from "./screens/Spark";
+ import LessonScreen from "./screens/LessonScreen";
+ import MyKnowledge from "./screens/MyKnowledge";
+ import AIConfigPanel from "./screens/AIConfigPanel";
+ import StoryLibrary from "./screens/StoryLibrary";
+ import StoryReader from "./screens/StoryReader";
+ import FamilyStories from "./screens/FamilyStories";
++import ConnectDevice from "./screens/ConnectDevice";
+ 
+ export default function App() {
+   return (
+     <Routes>
+       <Route path="/" element={<Welcome />} />
+       <Route path="/crear" element={<CreateFamily />} />
+       <Route path="/login" element={<Login />} />
+       <Route element={<ProtectedRoute />}>
+         <Route path="/familia" element={<Navigate to="/familia/explorar" replace />} />
+         <Route path="/familia/explorar" element={<WhoExplores />} />
+         <Route path="/familia/nuevo" element={<AddExplorer />} />
+         <Route path="/explorar/:childId" element={<ChildAccess />} />
+         <Route path="/jugar" element={<Spark />} />
+         <Route path="/jugar/leccion/:id" element={<LessonScreen />} />
+         <Route path="/jugar/mis-islas" element={<MyKnowledge />} />
+         <Route path="/jugar/cuentos" element={<StoryLibrary />} />
+         <Route path="/jugar/cuentos/:id" element={<StoryReader />} />
+         <Route path="/familia/ia" element={<AIConfigPanel />} />
+         <Route path="/familia/cuentos" element={<FamilyStories />} />
++        <Route path="/familia/conectar" element={<ConnectDevice />} />
+       </Route>
+       <Route path="*" element={<Navigate to="/" replace />} />
+     </Routes>
+   );
+ }
+diff --git a/frontend/src/i18n/translations.ts b/frontend/src/i18n/translations.ts
+index 0ed4fb8..de4c95e 100644
+--- a/frontend/src/i18n/translations.ts
++++ b/frontend/src/i18n/translations.ts
+@@ -116,20 +116,26 @@ export const translations: Record<Lang, Dict> = {
+     "familyStories.pending": "Pendiente",
+     "familyStories.approved": "Aprobado",
+     "familyStories.rejected": "Rechazado",
+     "familyStories.approve": "✅ Aprobar",
+     "familyStories.reject": "🚫 Rechazar",
+     "familyStories.titleLabel": "Título",
+     "familyStories.bodyLabel": "Cuento",
+     "familyStories.error": "No se pudieron cargar los cuentos",
+     "familyStories.link": "📚 Revisar cuentos",
+     "voice.dictate": "Dictar la pregunta",
++    "connect.title": "📱 Conectar otro dispositivo",
++    "connect.subtitle": "Abre esta dirección en un móvil o tablet conectados a la misma WiFi.",
++    "connect.copy": "Copiar dirección",
++    "connect.copied": "¡Copiada!",
++    "connect.localhostWarn": "Estás en «localhost». Para usarlo desde otro dispositivo, abre la app en este PC con su IP de red (p. ej. http://192.168.1.50:5173) y vuelve aquí.",
++    "connect.link": "📱 Conectar móvil",
+   },
+   en: {
+     "welcome.eyebrow": "Learning through curiosity",
+     "welcome.tagline": "Every question your kids ask lights up an island to explore.",
+     "welcome.create": "Create my family space",
+     "welcome.login": "I already have an account · Sign in",
+     "createFamily.title": "⚓ Create your family space",
+     "createFamily.subtitle": "You manage it. Your kids explore, safely.",
+     "createFamily.safety": "No child data. Only you manage the crew.",
+     "field.name": "Your name",
+@@ -232,12 +238,18 @@ export const translations: Record<Lang, Dict> = {
+     "familyStories.pending": "Pending",
+     "familyStories.approved": "Approved",
+     "familyStories.rejected": "Rejected",
+     "familyStories.approve": "✅ Approve",
+     "familyStories.reject": "🚫 Reject",
+     "familyStories.titleLabel": "Title",
+     "familyStories.bodyLabel": "Story",
+     "familyStories.error": "Could not load stories",
+     "familyStories.link": "📚 Review stories",
+     "voice.dictate": "Dictate the question",
++    "connect.title": "📱 Connect another device",
++    "connect.subtitle": "Open this address on a phone or tablet on the same WiFi.",
++    "connect.copy": "Copy address",
++    "connect.copied": "Copied!",
++    "connect.localhostWarn": "You're on \"localhost\". To use it from another device, open the app on this PC via its network IP (e.g. http://192.168.1.50:5173) and come back here.",
++    "connect.link": "📱 Connect phone",
+   },
+ };
+diff --git a/frontend/src/screens/ConnectDevice.test.tsx b/frontend/src/screens/ConnectDevice.test.tsx
+new file mode 100644
+index 0000000..f34eba0
+--- /dev/null
++++ b/frontend/src/screens/ConnectDevice.test.tsx
+@@ -0,0 +1,19 @@
++import { render, screen } from "@testing-library/react";
++import { MemoryRouter } from "react-router-dom";
++import { expect, test } from "vitest";
++import { I18nProvider } from "../i18n/I18nContext";
++import ConnectDevice from "./ConnectDevice";
++
++test("shows the app URL and a QR code", () => {
++  render(
++    <I18nProvider initialLang="es">
++      <MemoryRouter>
++        <ConnectDevice />
++      </MemoryRouter>
++    </I18nProvider>,
++  );
++  // En jsdom, window.location.origin suele ser http://localhost:3000
++  expect(screen.getByText(/conectar otro dispositivo/i)).toBeInTheDocument();
++  expect(screen.getByText(new RegExp(window.location.origin.replace(/[.]/g, "\\."), "i"))).toBeInTheDocument();
++  expect(document.querySelector("svg")).not.toBeNull(); // el QR es un <svg>
++});
+diff --git a/frontend/src/screens/ConnectDevice.tsx b/frontend/src/screens/ConnectDevice.tsx
+new file mode 100644
+index 0000000..7ed9582
+--- /dev/null
++++ b/frontend/src/screens/ConnectDevice.tsx
+@@ -0,0 +1,53 @@
++import { useState } from "react";
++import { Link } from "react-router-dom";
++import { QRCodeSVG } from "qrcode.react";
++import { useI18n } from "../i18n/I18nContext";
++import ScreenCard from "../components/ScreenCard";
++
++export default function ConnectDevice() {
++  const { t } = useI18n();
++  const [copied, setCopied] = useState(false);
++  const url = window.location.origin;
++  const isLocal = /localhost|127\.0\.0\.1/.test(url);
++
++  async function copy() {
++    try {
++      await navigator.clipboard.writeText(url);
++      setCopied(true);
++      setTimeout(() => setCopied(false), 1500);
++    } catch {
++      // sin portapapeles: el usuario puede copiar a mano
++    }
++  }
++
++  return (
++    <ScreenCard>
++      <div>
++        <h1>{t("connect.title")}</h1>
++        <p style={{ margin: "4px 0 0", color: "#0a5a53", fontWeight: 600, fontSize: 14 }}>
++          {t("connect.subtitle")}
++        </p>
++      </div>
++
++      <div style={{ background: "#fff", borderRadius: 20, padding: 18, display: "flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
++        <QRCodeSVG value={url} size={188} bgColor="#ffffff" fgColor="#08433e" />
++        <code style={{ fontWeight: 800, color: "var(--teal-dark)", wordBreak: "break-all", textAlign: "center" }}>
++          {url}
++        </code>
++        <button onClick={() => void copy()} style={{ width: "100%" }}>
++          {copied ? t("connect.copied") : t("connect.copy")}
++        </button>
++      </div>
++
++      {isLocal && (
++        <p role="alert" style={{ background: "rgba(255,255,255,.6)", borderRadius: 12, padding: 12, color: "#0a5a53", fontSize: 13, margin: 0 }}>
++          ⚠️ {t("connect.localhostWarn")}
++        </p>
++      )}
++
++      <Link to="/familia/explorar" style={{ textAlign: "center", marginTop: 4 }}>
++        ←
++      </Link>
++    </ScreenCard>
++  );
++}
+diff --git a/frontend/src/screens/WhoExplores.tsx b/frontend/src/screens/WhoExplores.tsx
+index dd50c79..f375cb6 100644
+--- a/frontend/src/screens/WhoExplores.tsx
++++ b/frontend/src/screens/WhoExplores.tsx
+@@ -54,13 +54,16 @@ export default function WhoExplores() {
+       </Link>
+       <p style={{ fontSize: 12, color: "#0a5a53", textAlign: "center", margin: "8px 0 0" }}>
+         {t("who.demoHint")}
+       </p>
+       <Link to="/familia/ia" style={{ textAlign: "center", marginTop: 4 }}>
+         {t("aiPanel.link")}
+       </Link>
+       <Link to="/familia/cuentos" style={{ textAlign: "center", marginTop: 4 }}>
+         {t("familyStories.link")}
+       </Link>
++      <Link to="/familia/conectar" style={{ textAlign: "center", marginTop: 4 }}>
++        {t("connect.link")}
++      </Link>
+     </ScreenCard>
+   );
+ }

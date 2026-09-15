@@ -1,0 +1,11 @@
+# `.env` solo cubre ese nombre exacto: una copia como `.env.bak` quedaba
+# fuera y podía acabar commiteada con secretos dentro.
+.env
+.env.*
+!.env.example
+media/
+backend/media/
+# Datos en tiempo de ejecución de TDD Guard (resultados de la última ejecución de tests)
+.claude/tdd-guard/
+# Artefactos temporales de Playwright MCP (snapshots, logs de consola)
+.playwright-mcp/

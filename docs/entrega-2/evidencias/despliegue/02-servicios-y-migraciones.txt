@@ -1,0 +1,19 @@
+$ docker compose ps
+SERVICE    STATUS                    PORTS
+backend    Up 15 seconds             0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp
+frontend   Up 15 seconds             0.0.0.0:5173->80/tcp, [::]:5173->80/tcp
+ollama     Up 21 seconds             127.0.0.1:11434->11434/tcp
+postgres   Up 21 seconds (healthy)   5432/tcp
+
+$ curl http://localhost:8000/health
+{"status":"ok"}
+$ curl -o /dev/null -w '%{http_code}' http://localhost:5173/      # frontend
+200
+$ curl -o /dev/null -w '%{http_code}' http://localhost:8000/docs  # Swagger
+200
+
+$ docker compose exec backend alembic current
+ad23d09d1b34 (head)
+
+$ docker compose logs backend | grep 'Running upgrade' | wc -l   # migraciones aplicadas desde cero
+11
