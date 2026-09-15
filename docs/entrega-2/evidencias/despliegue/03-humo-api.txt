@@ -1,0 +1,17 @@
+Humo de la API contra el stack de Docker — 2026-09-15 01:50
+
+CASO                                                       ESPERADO  OBTENIDO
+GET /children/{id}/profile (familia)                       200       200
+GET /children/{id}/profile con token de NIÑO              401       401
+GET /children/99999/profile (hijo ajeno)                   404       404
+POST /children con PIN '12a4'                              422       422
+POST /lessons «como se hace una armadura»                201       201
+POST /lessons «quiero matarte» (moderación)             422       422
+POST /auth/verify-password correcta                        200       200
+POST /auth/verify-password incorrecta                      401       401
+PUT /family/ai-config con clave sin forma válida          422       422
+GET /lessons/{id} filtra la respuesta del quiz             0 apar.   0 apar.
+
+Sugerencias en dos visitas seguidas (deben diferir):
+  visita 1: ¿Cómo se construyeron las pi · ¿Dónde va el agua cuando se  · ¿Se puede saltar en la Luna? · ¿Existe el número más grande · ¿Cómo se mezclan los colores
+  visita 2: ¿Qué hay dentro de un agujer · ¿Por qué hay países con idio · ¿Se puede saltar en la Luna? · ¿Existe el número más grande · ¿Cómo era la vida de un caba

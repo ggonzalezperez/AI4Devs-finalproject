@@ -1,0 +1,492 @@
+# Review package: 17f16ff..HEAD
+
+## Commits
+d4c642e feat(frontend): image config panel section + lesson image render
+
+## Files changed
+ frontend/src/api/aiConfig.ts                | 11 +++++
+ frontend/src/api/client.ts                  |  4 ++
+ frontend/src/api/nucleo.ts                  |  1 +
+ frontend/src/i18n/translations.ts           |  6 +++
+ frontend/src/screens/AIConfigPanel.test.tsx | 15 +++++-
+ frontend/src/screens/AIConfigPanel.tsx      | 72 +++++++++++++++++++++++++++++
+ frontend/src/screens/LessonScreen.test.tsx  |  1 +
+ frontend/src/screens/LessonScreen.tsx       |  8 ++++
+ 8 files changed, 116 insertions(+), 2 deletions(-)
+
+## Diff
+diff --git a/frontend/src/api/aiConfig.ts b/frontend/src/api/aiConfig.ts
+index 7971cbc..0dff267 100644
+--- a/frontend/src/api/aiConfig.ts
++++ b/frontend/src/api/aiConfig.ts
+@@ -1,20 +1,25 @@
+ import { apiFetch } from "./client";
+ 
+ export type AIConfig = {
+   tier: string;
+   provider: string;
+   model: string | null;
+   base_url: string | null;
+   has_api_key: boolean;
+   monthly_quota: number;
+   used_count: number;
++  image_provider: string;
++  image_model: string | null;
++  image_base_url: string | null;
++  image_enabled: boolean;
++  has_image_api_key: boolean;
+ };
+ 
+ export type Provider = {
+   id: string;
+   label: string;
+   tier: string;
+   needs_key: boolean;
+   needs_base_url: boolean;
+   enabled: boolean;
+   models: string[];
+@@ -25,35 +30,41 @@ export type OllamaModel = {
+   label: string;
+   min_vram_gb: number;
+   min_ram_gb: number;
+   speed: string;
+ };
+ 
+ export type Catalog = {
+   providers: Provider[];
+   ollama_models: OllamaModel[];
+   default_local_model: string;
++  image_providers: Provider[];
+ };
+ 
+ export type Recommendation = {
+   can_run_local: boolean;
+   fits: string[];
+   recommended: string;
+   note: string;
+ };
+ 
+ export type AIConfigUpdate = {
+   tier: string;
+   provider: string;
+   model?: string | null;
+   base_url?: string | null;
+   api_key?: string | null;
++  image_provider?: string;
++  image_model?: string | null;
++  image_base_url?: string | null;
++  image_api_key?: string | null;
++  image_enabled?: boolean;
+ };
+ 
+ export function getAIConfig() {
+   return apiFetch<AIConfig>("/family/ai-config", { auth: true });
+ }
+ 
+ export function putAIConfig(payload: AIConfigUpdate) {
+   return apiFetch<AIConfig>("/family/ai-config", { method: "PUT", auth: true, body: payload });
+ }
+ 
+diff --git a/frontend/src/api/client.ts b/frontend/src/api/client.ts
+index 3cd6dbf..6865a9c 100644
+--- a/frontend/src/api/client.ts
++++ b/frontend/src/api/client.ts
+@@ -24,20 +24,24 @@ export function setToken(token: string | null): void {
+   if (token) localStorage.setItem(TOKEN_KEY, token);
+   else localStorage.removeItem(TOKEN_KEY);
+ }
+ 
+ export function getToken(): string | null {
+   return localStorage.getItem(TOKEN_KEY);
+ }
+ 
+ type Options = { method?: string; body?: unknown; auth?: boolean | "child" };
+ 
++export function assetUrl(path: string): string {
++  return `${BASE_URL}${path}`;
++}
++
+ export async function apiFetch<T>(path: string, options: Options = {}): Promise<T> {
+   const headers: Record<string, string> = { "Content-Type": "application/json" };
+   if (options.auth) {
+     const token = options.auth === "child" ? getChildToken() : getToken();
+     if (token) headers.Authorization = `Bearer ${token}`;
+   }
+   const res = await fetch(`${BASE_URL}${path}`, {
+     method: options.method ?? "GET",
+     headers,
+     body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+diff --git a/frontend/src/api/nucleo.ts b/frontend/src/api/nucleo.ts
+index b328d6d..7f800e5 100644
+--- a/frontend/src/api/nucleo.ts
++++ b/frontend/src/api/nucleo.ts
+@@ -10,20 +10,21 @@ export type Lesson = {
+   id: number;
+   curiosity: string;
+   subject: string;
+   concept: string;
+   title: string;
+   body: string;
+   fun_fact: string;
+   answered: boolean;
+   quiz: { question: string; options: string[] };
+   follow_ups: string[];
++  image_url: string | null;
+ };
+ 
+ export type Suggestion = { curiosity: string; emoji: string };
+ export type AnswerResult = { correct: boolean; explanation: string; concept: string };
+ export type KnowledgeNode = { id: number; concept: string; subject: string; mastery: number; root_lesson_id: number | null };
+ 
+ export function createLesson(curiosity: string, subject?: string) {
+   return apiFetch<Lesson>("/lessons", { method: "POST", auth: "child", body: { curiosity, subject } });
+ }
+ 
+diff --git a/frontend/src/i18n/translations.ts b/frontend/src/i18n/translations.ts
+index de4c95e..b60e405 100644
+--- a/frontend/src/i18n/translations.ts
++++ b/frontend/src/i18n/translations.ts
+@@ -91,20 +91,23 @@ export const translations: Record<Lang, Dict> = {
+     "aiPanel.link": "⚙️ Configurar IA",
+     "aiPanel.intro": "Elige cómo se crean las lecciones de tus hijos:",
+     "aiPanel.tierFree": "🟢 Gratis: modelo local (Ollama) o demo. Sin coste.",
+     "aiPanel.tierByok": "🔑 Tu clave: usa tu cuenta de Claude/OpenAI/… Pagas a tu proveedor.",
+     "aiPanel.tierManaged": "💼 Comercial: nos encargamos nosotros (próximamente).",
+     "aiPanel.keyNote": "🔒 Tu clave se guarda cifrada y nunca se muestra.",
+     "aiPanel.useThis": "Usar este modelo",
+     "aiPanel.localHelp": "Necesitas Ollama corriendo y el modelo descargado.",
+     "aiPanel.byokHelp": "Pega tu clave API; se guarda cifrada.",
+     "aiPanel.freeHelp": "Modo demo: lecciones de ejemplo, sin IA real.",
++    "aiPanel.imgTitle": "🖼️ Imágenes en las lecciones",
++    "aiPanel.imgHelp": "Si activas un modelo de imagen, cada lección incluirá una ilustración acorde a la edad. Gratis con HuggingFace (token) o local con SDXL; OpenAI/Gemini de pago.",
++    "aiPanel.imgEnable": "Activar imágenes",
+     "child.hi": "¡Hola,",
+     "child.home": "Inicio",
+     "child.islands": "islas",
+     "stories.title": "📚 Mis cuentos",
+     "stories.create": "✨ Crear un cuento",
+     "stories.creating": "Creando tu cuento...",
+     "stories.pending": "¡Listo! Tus padres lo revisarán pronto. 💛",
+     "stories.empty": "Aún no tienes cuentos aprobados. ¡Crea el primero!",
+     "stories.read": "Leer",
+     "stories.back": "← Volver a mis cuentos",
+@@ -213,20 +216,23 @@ export const translations: Record<Lang, Dict> = {
+     "aiPanel.link": "⚙️ AI settings",
+     "aiPanel.intro": "Choose how your kids' lessons are created:",
+     "aiPanel.tierFree": "🟢 Free: local model (Ollama) or demo. No cost.",
+     "aiPanel.tierByok": "🔑 Your key: use your Claude/OpenAI/… account. You pay your provider.",
+     "aiPanel.tierManaged": "💼 Commercial: we handle it (coming soon).",
+     "aiPanel.keyNote": "🔒 Your key is stored encrypted and never shown.",
+     "aiPanel.useThis": "Use this model",
+     "aiPanel.localHelp": "You need Ollama running and the model pulled.",
+     "aiPanel.byokHelp": "Paste your API key; it is stored encrypted.",
+     "aiPanel.freeHelp": "Demo mode: example lessons, no real AI.",
++    "aiPanel.imgTitle": "🖼️ Images in lessons",
++    "aiPanel.imgHelp": "If you enable an image model, each lesson includes an age-appropriate illustration. Free with HuggingFace (token) or local with SDXL; OpenAI/Gemini are paid.",
++    "aiPanel.imgEnable": "Enable images",
+     "child.hi": "Hi,",
+     "child.home": "Home",
+     "child.islands": "islands",
+     "stories.title": "📚 My stories",
+     "stories.create": "✨ Create a story",
+     "stories.creating": "Creating your story...",
+     "stories.pending": "Done! Your parents will review it soon. 💛",
+     "stories.empty": "No approved stories yet. Create your first one!",
+     "stories.read": "Read",
+     "stories.back": "← Back to my stories",
+diff --git a/frontend/src/screens/AIConfigPanel.test.tsx b/frontend/src/screens/AIConfigPanel.test.tsx
+index b731243..e782ad1 100644
+--- a/frontend/src/screens/AIConfigPanel.test.tsx
++++ b/frontend/src/screens/AIConfigPanel.test.tsx
+@@ -6,22 +6,26 @@ import { I18nProvider } from "../i18n/I18nContext";
+ import { setToken } from "../api/client";
+ import AIConfigPanel from "./AIConfigPanel";
+ 
+ const CATALOG = {
+   providers: [
+     { id: "stub", label: "Demo", tier: "free", needs_key: false, needs_base_url: false, enabled: true, models: [] },
+     { id: "claude", label: "Claude", tier: "byok", needs_key: true, needs_base_url: false, enabled: true, models: ["claude-haiku-4-5"] },
+   ],
+   ollama_models: [],
+   default_local_model: "qwen3:4b",
++  image_providers: [
++    { id: "none", label: "Sin imágenes", tier: "free", needs_key: false, needs_base_url: false, enabled: true, models: [] },
++    { id: "huggingface", label: "HuggingFace", tier: "free", needs_key: true, needs_base_url: false, enabled: true, models: ["black-forest-labs/FLUX.1-schnell"] },
++  ],
+ };
+-const CONFIG = { tier: "free", provider: "stub", model: null, base_url: null, has_api_key: false, monthly_quota: 0, used_count: 0 };
++const CONFIG = { tier: "free", provider: "stub", model: null, base_url: null, has_api_key: false, monthly_quota: 0, used_count: 0, image_provider: "none", image_model: null, image_base_url: null, image_enabled: false, has_image_api_key: false };
+ 
+ beforeEach(() => {
+   localStorage.clear();
+   setToken("fam-tok");
+ });
+ afterEach(() => vi.restoreAllMocks());
+ 
+ function mockFetch() {
+   const put = vi.fn();
+   vi.stubGlobal(
+@@ -44,19 +48,26 @@ function setup() {
+       <MemoryRouter>
+         <AIConfigPanel />
+       </MemoryRouter>
+     </I18nProvider>,
+   );
+ }
+ 
+ test("shows providers and saves a BYOK Claude config with key", async () => {
+   const put = mockFetch();
+   setup();
+-  const providerSelect = await screen.findByLabelText("Proveedor");
++  const providerSelects = await screen.findAllByLabelText("Proveedor");
++  const providerSelect = providerSelects[0];
+   await userEvent.selectOptions(providerSelect, "claude");
+   await userEvent.type(screen.getByLabelText("Clave API"), "sk-ant-xyz");
+   await userEvent.click(screen.getByRole("button", { name: /guardar/i }));
+   await waitFor(() => expect(put).toHaveBeenCalled());
+   const sent = put.mock.calls[0][0];
+   expect(sent.provider).toBe("claude");
+   expect(sent.api_key).toBe("sk-ant-xyz");
+ });
++
++test("shows image config section", async () => {
++  mockFetch();
++  setup();
++  expect(await screen.findByText(/Imágenes en las lecciones/i)).toBeInTheDocument();
++});
+diff --git a/frontend/src/screens/AIConfigPanel.tsx b/frontend/src/screens/AIConfigPanel.tsx
+index ff08489..74ca086 100644
+--- a/frontend/src/screens/AIConfigPanel.tsx
++++ b/frontend/src/screens/AIConfigPanel.tsx
+@@ -15,65 +15,87 @@ import Button from "../components/Button";
+ import ScreenCard from "../components/ScreenCard";
+ 
+ export default function AIConfigPanel() {
+   const { t } = useI18n();
+   const [catalog, setCatalog] = useState<Catalog | null>(null);
+   const [provider, setProvider] = useState("stub");
+   const [model, setModel] = useState("");
+   const [baseUrl, setBaseUrl] = useState("");
+   const [apiKey, setApiKey] = useState("");
+   const [hasKey, setHasKey] = useState(false);
++  const [imageProvider, setImageProvider] = useState("none");
++  const [imageModel, setImageModel] = useState("");
++  const [imageBaseUrl, setImageBaseUrl] = useState("");
++  const [imageApiKey, setImageApiKey] = useState("");
++  const [imageEnabled, setImageEnabled] = useState(false);
++  const [hasImageKey, setHasImageKey] = useState(false);
+   const [vram, setVram] = useState("");
+   const [ram, setRam] = useState("");
+   const [rec, setRec] = useState<Recommendation | null>(null);
+   const [saved, setSaved] = useState(false);
+   const [error, setError] = useState("");
+ 
+   useEffect(() => {
+     getCatalog().then(setCatalog).catch(() => undefined);
+     getAIConfig()
+       .then((c: AIConfig) => {
+         setProvider(c.provider);
+         setModel(c.model ?? "");
+         setBaseUrl(c.base_url ?? "");
+         setHasKey(c.has_api_key);
++        setImageProvider(c.image_provider);
++        setImageModel(c.image_model ?? "");
++        setImageBaseUrl(c.image_base_url ?? "");
++        setImageEnabled(c.image_enabled);
++        setHasImageKey(c.has_image_api_key);
+       })
+       .catch(() => undefined);
+   }, []);
+ 
+   if (!catalog) {
+     return (
+       <ScreenCard>
+         <p>…</p>
+       </ScreenCard>
+     );
+   }
+ 
+   const providers = catalog.providers;
+   const current = providers.find((p) => p.id === provider);
+   const tier = current?.tier ?? "free";
+   const modelOptions =
+     provider === "ollama" ? catalog.ollama_models.map((m) => m.id) : current?.models ?? [];
+ 
++  const imageProviders = catalog.image_providers ?? [];
++  const currentImg = imageProviders.find((p) => p.id === imageProvider);
++  const imgModelOptions = currentImg?.models ?? [];
++
+   async function save() {
+     setError("");
+     setSaved(false);
+     try {
+       const cfg = await putAIConfig({
+         tier,
+         provider,
+         model: model || null,
+         base_url: provider === "ollama" ? baseUrl || null : null,
+         api_key: apiKey ? apiKey : undefined,
++        image_provider: imageProvider,
++        image_model: imageModel || null,
++        image_base_url: currentImg?.needs_base_url ? imageBaseUrl || null : null,
++        image_api_key: imageApiKey ? imageApiKey : undefined,
++        image_enabled: imageEnabled,
+       });
+       setHasKey(cfg.has_api_key);
+       setApiKey("");
++      setHasImageKey(cfg.has_image_api_key);
++      setImageApiKey("");
+       setSaved(true);
+     } catch (err) {
+       setError(err instanceof ApiError ? err.message : t("aiPanel.error"));
+     }
+   }
+ 
+   async function doRecommend() {
+     try {
+       setRec(await recommendHardware(Number(vram) || 0, Number(ram) || 0));
+     } catch {
+@@ -153,20 +175,70 @@ export default function AIConfigPanel() {
+             </label>
+             <small style={{ color: "#0a5a53" }}>{t("aiPanel.keyNote")}</small>
+           </>
+         )}
+ 
+         {error && <p role="alert" style={{ color: "#c0392b", fontWeight: 700, margin: 0 }}>{error}</p>}
+         {saved && <p style={{ color: "var(--green)", fontWeight: 700, margin: 0 }}>{t("aiPanel.saved")} ✓</p>}
+         <Button onClick={() => void save()}>{t("aiPanel.save")}</Button>
+       </div>
+ 
++      <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12, background: "#fff", borderRadius: 16, padding: 16 }}>
++        <strong>{t("aiPanel.imgTitle")}</strong>
++        <small style={{ color: "#0a5a53" }}>{t("aiPanel.imgHelp")}</small>
++        <label style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
++          <input type="checkbox" checked={imageEnabled} onChange={(e) => setImageEnabled(e.target.checked)} />
++          {t("aiPanel.imgEnable")}
++        </label>
++        <label>
++          {t("aiPanel.provider")}
++          <select value={imageProvider} onChange={(e) => { setImageProvider(e.target.value); setImageModel(""); }}>
++            {imageProviders.map((p) => (
++              <option key={p.id} value={p.id} disabled={!p.enabled}>
++                {p.label}{p.enabled ? "" : ` — ${t("aiPanel.soon")}`}
++              </option>
++            ))}
++          </select>
++        </label>
++        {imgModelOptions.length > 0 && (
++          <label>
++            {t("aiPanel.model")}
++            <select value={imageModel} onChange={(e) => setImageModel(e.target.value)}>
++              <option value="">—</option>
++              {imgModelOptions.map((m) => (
++                <option key={m} value={m}>{m}</option>
++              ))}
++            </select>
++          </label>
++        )}
++        {currentImg?.needs_base_url && (
++          <label>
++            {t("aiPanel.baseUrl")}
++            <input value={imageBaseUrl} onChange={(e) => setImageBaseUrl(e.target.value)} placeholder="http://localhost:7860" />
++          </label>
++        )}
++        {currentImg?.needs_key && (
++          <>
++            <label>
++              {t("aiPanel.apiKey")}
++              <input
++                type="password"
++                value={imageApiKey}
++                onChange={(e) => setImageApiKey(e.target.value)}
++                placeholder={hasImageKey ? t("aiPanel.apiKeySaved") : "hf_... / sk-..."}
++              />
++            </label>
++            <small style={{ color: "#0a5a53" }}>{t("aiPanel.keyNote")}</small>
++          </>
++        )}
++      </div>
++
+       <div style={{ marginTop: 14, background: "#fff", borderRadius: 16, padding: 16 }}>
+         <strong>{t("aiPanel.hardware")}</strong>
+         <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+           <input
+             aria-label={t("aiPanel.vram")}
+             value={vram}
+             onChange={(e) => setVram(e.target.value)}
+             placeholder={t("aiPanel.vram")}
+             inputMode="numeric"
+           />
+diff --git a/frontend/src/screens/LessonScreen.test.tsx b/frontend/src/screens/LessonScreen.test.tsx
+index 704c633..752a269 100644
+--- a/frontend/src/screens/LessonScreen.test.tsx
++++ b/frontend/src/screens/LessonScreen.test.tsx
+@@ -15,20 +15,21 @@ const TURN = {
+   id: 5,
+   curiosity: "¿por qué llueve?",
+   subject: "ciencia",
+   concept: "lluvia",
+   title: "La lluvia",
+   body: "El agua sube en forma de vapor y vuelve a caer.",
+   fun_fact: "Una nube pesa toneladas.",
+   answered: false,
+   follow_ups: ["¿Y la nieve?"],
+   quiz: { question: "¿Qué sube al cielo?", options: ["El agua", "La arena", "El fuego"] },
++  image_url: null,
+ };
+ 
+ test("renders the conversation and a follow-up chip", async () => {
+   vi.stubGlobal(
+     "fetch",
+     vi.fn(async () => new Response(JSON.stringify([TURN]), { status: 200 })),
+   );
+   render(
+     <I18nProvider initialLang="es">
+       <MemoryRouter initialEntries={["/jugar/leccion/5"]}>
+diff --git a/frontend/src/screens/LessonScreen.tsx b/frontend/src/screens/LessonScreen.tsx
+index 7965081..b433dc2 100644
+--- a/frontend/src/screens/LessonScreen.tsx
++++ b/frontend/src/screens/LessonScreen.tsx
+@@ -1,13 +1,14 @@
+ import { useEffect, useRef, useState } from "react";
+ import { useParams } from "react-router-dom";
+ import { answerLesson, askInLesson, getThread, type AnswerResult, type Lesson } from "../api/nucleo";
++import { assetUrl } from "../api/client";
+ import { useI18n } from "../i18n/I18nContext";
+ import ScreenCard from "../components/ScreenCard";
+ import ChildHeader from "../components/ChildHeader";
+ import MicButton from "../components/MicButton";
+ 
+ function ChatTurn({ turn }: { turn: Lesson }) {
+   const { t } = useI18n();
+   const [playing, setPlaying] = useState(false);
+   const [result, setResult] = useState<AnswerResult | null>(null);
+ 
+@@ -17,20 +18,27 @@ function ChatTurn({ turn }: { turn: Lesson }) {
+   }
+ 
+   return (
+     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+       <div style={{ alignSelf: "flex-end", background: "var(--coral)", color: "#fff", borderRadius: "16px 16px 4px 16px", padding: "10px 14px", maxWidth: "85%", fontWeight: 600 }}>
+         {turn.curiosity}
+       </div>
+       <div style={{ alignSelf: "flex-start", background: "#fff", borderRadius: "16px 16px 16px 4px", padding: 14, maxWidth: "94%", color: "var(--teal-dark)" }}>
+         <div style={{ fontSize: 11, fontWeight: 800, textTransform: "uppercase", color: "#0a5a53" }}>✨ {turn.subject}</div>
+         <div style={{ fontWeight: 700, fontSize: 16, marginTop: 4 }}>{turn.title}</div>
++        {turn.image_url && (
++          <img
++            src={assetUrl(turn.image_url)}
++            alt={turn.title}
++            style={{ width: "100%", borderRadius: 12, margin: "8px 0" }}
++          />
++        )}
+         <div style={{ lineHeight: 1.55, fontSize: 15, marginTop: 4 }}>{turn.body}</div>
+         <div style={{ marginTop: 8, fontSize: 13 }}>
+           <strong style={{ color: "var(--amber)" }}>💡 {t("lesson.funFact")}: </strong>
+           {turn.fun_fact}
+         </div>
+         {!playing && !result && (
+           <button onClick={() => setPlaying(true)} style={{ marginTop: 10, padding: "8px 12px" }}>
+             {t("lesson.quizCta")}
+           </button>
+         )}

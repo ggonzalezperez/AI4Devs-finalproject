@@ -1,0 +1,3656 @@
+# Review package: 31834e065edc1fa1f5571d2a78fa3d18c2089a7f..HEAD
+
+## Commits
+b656075 feat(backend): conversational lesson threads (context-aware follow-ups + auto islands)
+b25ce93 feat(frontend): free-text 'ask anything' input inside the lesson
+706d710 feat(frontend): conversational lesson follow-up chips
+6a5a68b feat(backend): richer age-adapted lessons (teach-based prompt + follow_ups)
+564c8f3 feat(frontend): designed child avatars (picker + crew + access + header)
+b7a63d9 feat(backend): child avatar field + migration
+15acb1b feat(frontend): welcome screen + parent sign-in access
+df16c7b fix(frontend): do not overwrite story text when rejecting
+c502e8d feat(frontend): family story approval panel
+aa19ad8 feat(frontend): child story library and reader
+643898d feat(backend): story endpoints (child create/read approved, family list/review)
+79e29aa feat(backend): Story model + stub generator + creation service + migration
+
+## Files changed
+ .../3c29534f459b_lesson_conversation_threading.py  |  36 ++++
+ .../7eed4f40a009_lesson_follow_ups_column.py       |  32 +++
+ .../alembic/versions/90ff6eb610f4_stories_table.py |  44 ++++
+ .../versions/c14d2e92bf0d_child_avatar_column.py   |  32 +++
+ backend/app/main.py                                |   3 +-
+ backend/app/models/__init__.py                     |   1 +
+ backend/app/models/child.py                        |   1 +
+ backend/app/models/lesson.py                       |   3 +
+ backend/app/models/story.py                        |  22 ++
+ backend/app/repositories/child.py                  |   4 +-
+ backend/app/repositories/knowledge.py              |  15 ++
+ backend/app/repositories/lesson.py                 |  17 ++
+ backend/app/repositories/story.py                  |  47 ++++
+ backend/app/routers/children.py                    |   2 +-
+ backend/app/routers/lessons.py                     |  29 +++
+ backend/app/routers/me.py                          |   2 +-
+ backend/app/routers/stories.py                     |  70 ++++++
+ backend/app/schemas/child.py                       |   2 +
+ backend/app/schemas/knowledge.py                   |   1 +
+ backend/app/schemas/lesson.py                      |   1 +
+ backend/app/schemas/story.py                       |  18 ++
+ backend/app/services/ai_providers.py               |  72 +++++--
+ backend/app/services/child_service.py              |   4 +-
+ backend/app/services/lesson_generator.py           |  29 ++-
+ backend/app/services/lesson_service.py             |  43 +++-
+ backend/app/services/story_generator.py            |  33 +++
+ backend/app/services/story_service.py              |  35 +++
+ backend/tests/test_ai_providers.py                 |   3 +
+ backend/tests/test_answer_api.py                   |  12 +-
+ backend/tests/test_children.py                     |  22 ++
+ backend/tests/test_conversation.py                 | 205 ++++++++++++++++++
+ backend/tests/test_lesson_generator.py             |   7 +
+ backend/tests/test_lessons_api.py                  |   2 +
+ backend/tests/test_me_profile.py                   |   1 +
+ backend/tests/test_story.py                        |  34 +++
+ backend/tests/test_story_api.py                    |  91 ++++++++
+ frontend/src/App.test.tsx                          |  17 +-
+ frontend/src/App.tsx                               |  10 +-
+ frontend/src/api/children.ts                       |   6 +-
+ frontend/src/api/nucleo.ts                         |   3 +-
+ frontend/src/api/stories.ts                        |  34 +++
+ frontend/src/components/ChildHeader.test.tsx       |   2 +-
+ frontend/src/components/ChildHeader.tsx            |   8 +-
+ frontend/src/components/avatars.tsx                | 236 +++++++++++++++++++++
+ frontend/src/i18n/translations.ts                  |  56 +++++
+ frontend/src/lib/avatar.ts                         |   5 -
+ frontend/src/screens/AddExplorer.test.tsx          |  29 ++-
+ frontend/src/screens/AddExplorer.tsx               |  31 ++-
+ frontend/src/screens/ChildAccess.tsx               |  10 +-
+ frontend/src/screens/CreateFamily.tsx              |   6 +-
+ frontend/src/screens/FamilyStories.test.tsx        |  33 +++
+ frontend/src/screens/FamilyStories.tsx             | 121 +++++++++++
+ frontend/src/screens/LessonScreen.test.tsx         |   3 +
+ frontend/src/screens/LessonScreen.tsx              |  68 +++++-
+ frontend/src/screens/Login.tsx                     |   8 +-
+ frontend/src/screens/Spark.tsx                     |   5 +-
+ frontend/src/screens/StoryLibrary.test.tsx         |  32 +++
+ frontend/src/screens/StoryLibrary.tsx              |  67 ++++++
+ frontend/src/screens/StoryReader.tsx               |  40 ++++
+ frontend/src/screens/Welcome.test.tsx              |  36 ++++
+ frontend/src/screens/Welcome.tsx                   |  68 ++++++
+ frontend/src/screens/WhoExplores.test.tsx          |   5 +-
+ frontend/src/screens/WhoExplores.tsx               |   9 +-
+ frontend/src/styles/theme.css                      |  35 +++
+ 64 files changed, 1892 insertions(+), 66 deletions(-)
+
+## Diff
+diff --git a/backend/alembic/versions/3c29534f459b_lesson_conversation_threading.py b/backend/alembic/versions/3c29534f459b_lesson_conversation_threading.py
+new file mode 100644
+index 0000000..3609ab2
+--- /dev/null
++++ b/backend/alembic/versions/3c29534f459b_lesson_conversation_threading.py
+@@ -0,0 +1,36 @@
++"""lesson conversation threading
++
++Revision ID: 3c29534f459b
++Revises: 7eed4f40a009
++Create Date: 2026-06-29 12:12:57.856278
++
++"""
++from typing import Sequence, Union
++
++from alembic import op
++import sqlalchemy as sa
++
++
++# revision identifiers, used by Alembic.
++revision: str = '3c29534f459b'
++down_revision: Union[str, Sequence[str], None] = '7eed4f40a009'
++branch_labels: Union[str, Sequence[str], None] = None
++depends_on: Union[str, Sequence[str], None] = None
++
++
++def upgrade() -> None:
++    """Upgrade schema."""
++    # ### commands auto generated by Alembic - please adjust! ###
++    op.add_column('lessons', sa.Column('parent_id', sa.Integer(), nullable=True))
++    op.add_column('lessons', sa.Column('root_id', sa.Integer(), nullable=True))
++    op.create_index(op.f('ix_lessons_root_id'), 'lessons', ['root_id'], unique=False)
++    # ### end Alembic commands ###
++
++
++def downgrade() -> None:
++    """Downgrade schema."""
++    # ### commands auto generated by Alembic - please adjust! ###
++    op.drop_index(op.f('ix_lessons_root_id'), table_name='lessons')
++    op.drop_column('lessons', 'root_id')
++    op.drop_column('lessons', 'parent_id')
++    # ### end Alembic commands ###
+diff --git a/backend/alembic/versions/7eed4f40a009_lesson_follow_ups_column.py b/backend/alembic/versions/7eed4f40a009_lesson_follow_ups_column.py
+new file mode 100644
+index 0000000..4f9396f
+--- /dev/null
++++ b/backend/alembic/versions/7eed4f40a009_lesson_follow_ups_column.py
+@@ -0,0 +1,32 @@
++"""lesson follow_ups column
++
++Revision ID: 7eed4f40a009
++Revises: c14d2e92bf0d
++Create Date: 2026-06-29 10:27:31.078747
++
++"""
++from typing import Sequence, Union
++
++from alembic import op
++import sqlalchemy as sa
++
++
++# revision identifiers, used by Alembic.
++revision: str = '7eed4f40a009'
++down_revision: Union[str, Sequence[str], None] = 'c14d2e92bf0d'
++branch_labels: Union[str, Sequence[str], None] = None
++depends_on: Union[str, Sequence[str], None] = None
++
++
++def upgrade() -> None:
++    """Upgrade schema."""
++    # ### commands auto generated by Alembic - please adjust! ###
++    op.add_column('lessons', sa.Column('follow_ups', sa.JSON(), nullable=True))
++    # ### end Alembic commands ###
++
++
++def downgrade() -> None:
++    """Downgrade schema."""
++    # ### commands auto generated by Alembic - please adjust! ###
++    op.drop_column('lessons', 'follow_ups')
++    # ### end Alembic commands ###
+diff --git a/backend/alembic/versions/90ff6eb610f4_stories_table.py b/backend/alembic/versions/90ff6eb610f4_stories_table.py
+new file mode 100644
+index 0000000..d03b445
+--- /dev/null
++++ b/backend/alembic/versions/90ff6eb610f4_stories_table.py
+@@ -0,0 +1,44 @@
++"""stories table
++
++Revision ID: 90ff6eb610f4
++Revises: 30776978742d
++Create Date: 2026-06-28 23:29:51.434302
++
++"""
++from typing import Sequence, Union
++
++from alembic import op
++import sqlalchemy as sa
++
++
++# revision identifiers, used by Alembic.
++revision: str = '90ff6eb610f4'
++down_revision: Union[str, Sequence[str], None] = '30776978742d'
++branch_labels: Union[str, Sequence[str], None] = None
++depends_on: Union[str, Sequence[str], None] = None
++
++
++def upgrade() -> None:
++    """Upgrade schema."""
++    # ### commands auto generated by Alembic - please adjust! ###
++    op.create_table('stories',
++    sa.Column('id', sa.Integer(), nullable=False),
++    sa.Column('child_id', sa.Integer(), nullable=False),
++    sa.Column('title', sa.String(length=200), nullable=False),
++    sa.Column('body', sa.Text(), nullable=False),
++    sa.Column('status', sa.String(length=20), nullable=False),
++    sa.Column('created_at', sa.DateTime(), nullable=False),
++    sa.Column('reviewed_at', sa.DateTime(), nullable=True),
++    sa.ForeignKeyConstraint(['child_id'], ['children.id'], ),
++    sa.PrimaryKeyConstraint('id')
++    )
++    op.create_index(op.f('ix_stories_child_id'), 'stories', ['child_id'], unique=False)
++    # ### end Alembic commands ###
++
++
++def downgrade() -> None:
++    """Downgrade schema."""
++    # ### commands auto generated by Alembic - please adjust! ###
++    op.drop_index(op.f('ix_stories_child_id'), table_name='stories')
++    op.drop_table('stories')
++    # ### end Alembic commands ###
+diff --git a/backend/alembic/versions/c14d2e92bf0d_child_avatar_column.py b/backend/alembic/versions/c14d2e92bf0d_child_avatar_column.py
+new file mode 100644
+index 0000000..95c1cb0
+--- /dev/null
++++ b/backend/alembic/versions/c14d2e92bf0d_child_avatar_column.py
+@@ -0,0 +1,32 @@
++"""child avatar column
++
++Revision ID: c14d2e92bf0d
++Revises: 90ff6eb610f4
++Create Date: 2026-06-29 01:20:41.737263
++
++"""
++from typing import Sequence, Union
++
++from alembic import op
++import sqlalchemy as sa
++
++
++# revision identifiers, used by Alembic.
++revision: str = 'c14d2e92bf0d'
++down_revision: Union[str, Sequence[str], None] = '90ff6eb610f4'
++branch_labels: Union[str, Sequence[str], None] = None
++depends_on: Union[str, Sequence[str], None] = None
++
++
++def upgrade() -> None:
++    """Upgrade schema."""
++    # ### commands auto generated by Alembic - please adjust! ###
++    op.add_column("children", sa.Column("avatar", sa.String(length=40), nullable=False, server_default="fox"))
++    # ### end Alembic commands ###
++
++
++def downgrade() -> None:
++    """Downgrade schema."""
++    # ### commands auto generated by Alembic - please adjust! ###
++    op.drop_column('children', 'avatar')
++    # ### end Alembic commands ###
+diff --git a/backend/app/main.py b/backend/app/main.py
+index 0162e12..7eaeca6 100644
+--- a/backend/app/main.py
++++ b/backend/app/main.py
+@@ -1,25 +1,26 @@
+ from fastapi import FastAPI
+ from fastapi.middleware.cors import CORSMiddleware
+ 
+ from app.config import get_settings
+-from app.routers import ai_config, auth, children, lessons, me
++from app.routers import ai_config, auth, children, lessons, me, stories
+ 
+ app = FastAPI(title="Chispa API")
+ 
+ app.add_middleware(
+     CORSMiddleware,
+     allow_origins=[o.strip() for o in get_settings().cors_origins.split(",")],
+     allow_methods=["*"],
+     allow_headers=["*"],
+ )
+ 
+ app.include_router(auth.router)
+ app.include_router(children.router)
+ app.include_router(lessons.router)
+ app.include_router(me.router)
+ app.include_router(ai_config.router)
++app.include_router(stories.router)
+ 
+ 
+ @app.get("/health")
+ def health() -> dict[str, str]:
+     return {"status": "ok"}
+diff --git a/backend/app/models/__init__.py b/backend/app/models/__init__.py
+index 8a1ef5d..75175e8 100644
+--- a/backend/app/models/__init__.py
++++ b/backend/app/models/__init__.py
+@@ -1,5 +1,6 @@
+ from app.models.family import Family, User  # noqa: F401
+ from app.models.child import Child  # noqa: F401
+ from app.models.lesson import Lesson  # noqa: F401
+ from app.models.knowledge import KnowledgeNode  # noqa: F401
+ from app.models.ai_config import FamilyAIConfig  # noqa: F401
++from app.models.story import Story  # noqa: F401
+diff --git a/backend/app/models/child.py b/backend/app/models/child.py
+index 19d2b72..2def00c 100644
+--- a/backend/app/models/child.py
++++ b/backend/app/models/child.py
+@@ -11,20 +11,21 @@ def _utcnow() -> datetime:
+ 
+ 
+ class Child(Base):
+     __tablename__ = "children"
+ 
+     id: Mapped[int] = mapped_column(primary_key=True)
+     family_id: Mapped[int] = mapped_column(ForeignKey("families.id"))
+     name: Mapped[str] = mapped_column(String(80))
+     birthdate: Mapped[date] = mapped_column(Date)
+     pin_hash: Mapped[str] = mapped_column(String(255))
++    avatar: Mapped[str] = mapped_column(String(40), default="fox")
+     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+ 
+     family: Mapped["Family"] = relationship(back_populates="children")  # noqa: F821
+ 
+     @property
+     def age(self) -> int:
+         today = date.today()
+         return (
+             today.year
+             - self.birthdate.year
+diff --git a/backend/app/models/lesson.py b/backend/app/models/lesson.py
+index 9376bfd..ae9826f 100644
+--- a/backend/app/models/lesson.py
++++ b/backend/app/models/lesson.py
+@@ -18,12 +18,15 @@ class Lesson(Base):
+     curiosity: Mapped[str] = mapped_column(String(300))
+     subject: Mapped[str] = mapped_column(String(40))
+     concept: Mapped[str] = mapped_column(String(120))
+     title: Mapped[str] = mapped_column(String(200))
+     body: Mapped[str] = mapped_column(Text)
+     fun_fact: Mapped[str] = mapped_column(Text)
+     quiz_question: Mapped[str] = mapped_column(String(300))
+     quiz_options: Mapped[list] = mapped_column(JSON)
+     quiz_correct_index: Mapped[int] = mapped_column(Integer)
+     quiz_explanation: Mapped[str] = mapped_column(Text)
++    follow_ups: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list)
+     answered: Mapped[bool] = mapped_column(Boolean, default=False)
+     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
++    parent_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
++    root_id: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+diff --git a/backend/app/models/story.py b/backend/app/models/story.py
+new file mode 100644
+index 0000000..69b7cad
+--- /dev/null
++++ b/backend/app/models/story.py
+@@ -0,0 +1,22 @@
++from datetime import datetime, timezone
++
++from sqlalchemy import DateTime, ForeignKey, String, Text
++from sqlalchemy.orm import Mapped, mapped_column
++
++from app.database import Base
++
++
++def _utcnow() -> datetime:
++    return datetime.now(timezone.utc)
++
++
++class Story(Base):
++    __tablename__ = "stories"
++
++    id: Mapped[int] = mapped_column(primary_key=True)
++    child_id: Mapped[int] = mapped_column(ForeignKey("children.id"), index=True)
++    title: Mapped[str] = mapped_column(String(200))
++    body: Mapped[str] = mapped_column(Text)
++    status: Mapped[str] = mapped_column(String(20), default="pending")  # pending|approved|rejected
++    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
++    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+diff --git a/backend/app/repositories/child.py b/backend/app/repositories/child.py
+index f9bd2e8..f6f57f9 100644
+--- a/backend/app/repositories/child.py
++++ b/backend/app/repositories/child.py
+@@ -1,22 +1,22 @@
+ from datetime import date
+ 
+ from sqlalchemy import select
+ from sqlalchemy.orm import Session
+ 
+ from app.models.child import Child
+ 
+ 
+ def create_child(
+-    db: Session, family_id: int, name: str, birthdate: date, pin_hash: str
++    db: Session, family_id: int, name: str, birthdate: date, pin_hash: str, avatar: str = "fox"
+ ) -> Child:
+-    child = Child(family_id=family_id, name=name, birthdate=birthdate, pin_hash=pin_hash)
++    child = Child(family_id=family_id, name=name, birthdate=birthdate, pin_hash=pin_hash, avatar=avatar)
+     db.add(child)
+     db.commit()
+     db.refresh(child)
+     return child
+ 
+ 
+ def list_children(db: Session, family_id: int) -> list[Child]:
+     return list(
+         db.execute(select(Child).where(Child.family_id == family_id)).scalars().all()
+     )
+diff --git a/backend/app/repositories/knowledge.py b/backend/app/repositories/knowledge.py
+index d38dc8d..d30880e 100644
+--- a/backend/app/repositories/knowledge.py
++++ b/backend/app/repositories/knowledge.py
+@@ -15,16 +15,31 @@ def upsert_node(db: Session, child_id: int, concept: str, subject: str) -> Knowl
+         db.commit()
+         db.refresh(existing)
+         return existing
+     node = KnowledgeNode(child_id=child_id, concept=concept, subject=subject)
+     db.add(node)
+     db.commit()
+     db.refresh(node)
+     return node
+ 
+ 
++def ensure_node(db: Session, child_id: int, concept: str, subject: str) -> KnowledgeNode:
++    existing = db.execute(
++        select(KnowledgeNode).where(
++            KnowledgeNode.child_id == child_id, KnowledgeNode.concept == concept
++        )
++    ).scalar_one_or_none()
++    if existing:
++        return existing
++    node = KnowledgeNode(child_id=child_id, concept=concept, subject=subject)
++    db.add(node)
++    db.commit()
++    db.refresh(node)
++    return node
++
++
+ def list_for_child(db: Session, child_id: int) -> list[KnowledgeNode]:
+     return list(
+         db.execute(
+             select(KnowledgeNode).where(KnowledgeNode.child_id == child_id)
+         ).scalars().all()
+     )
+diff --git a/backend/app/repositories/lesson.py b/backend/app/repositories/lesson.py
+index f3dee22..e4bd841 100644
+--- a/backend/app/repositories/lesson.py
++++ b/backend/app/repositories/lesson.py
+@@ -1,17 +1,34 @@
++from sqlalchemy import or_, select
+ from sqlalchemy.orm import Session
+ 
+ from app.models.lesson import Lesson
+ 
+ 
+ def create(db: Session, lesson: Lesson) -> Lesson:
+     db.add(lesson)
+     db.commit()
+     db.refresh(lesson)
+     return lesson
+ 
+ 
+ def get_for_child(db: Session, child_id: int, lesson_id: int) -> Lesson | None:
+     lesson = db.get(Lesson, lesson_id)
+     if lesson is None or lesson.child_id != child_id:
+         return None
+     return lesson
++
++
++def list_thread(db: Session, child_id: int, lesson_id: int) -> list[Lesson]:
++    anchor = get_for_child(db, child_id, lesson_id)
++    if anchor is None:
++        return []
++    root_id = anchor.root_id or anchor.id
++    rows = db.execute(
++        select(Lesson)
++        .where(
++            Lesson.child_id == child_id,
++            or_(Lesson.id == root_id, Lesson.root_id == root_id),
++        )
++        .order_by(Lesson.id)
++    ).scalars().all()
++    return list(rows)
+diff --git a/backend/app/repositories/story.py b/backend/app/repositories/story.py
+new file mode 100644
+index 0000000..b949db8
+--- /dev/null
++++ b/backend/app/repositories/story.py
+@@ -0,0 +1,47 @@
++from sqlalchemy import select
++from sqlalchemy.orm import Session
++
++from app.models.child import Child
++from app.models.story import Story
++
++
++def create(db: Session, story: Story) -> Story:
++    db.add(story)
++    db.commit()
++    db.refresh(story)
++    return story
++
++
++def list_for_child(db: Session, child_id: int, status: str | None = None) -> list[Story]:
++    q = select(Story).where(Story.child_id == child_id)
++    if status:
++        q = q.where(Story.status == status)
++    return list(db.execute(q).scalars().all())
++
++
++def get_for_child(db: Session, child_id: int, story_id: int) -> Story | None:
++    s = db.get(Story, story_id)
++    if s is None or s.child_id != child_id:
++        return None
++    return s
++
++
++def get_for_family(db: Session, family_id: int, story_id: int) -> Story | None:
++    s = db.get(Story, story_id)
++    if s is None:
++        return None
++    child = db.get(Child, s.child_id)
++    if child is None or child.family_id != family_id:
++        return None
++    return s
++
++
++def list_for_family(db: Session, family_id: int, status: str | None = None) -> list[Story]:
++    q = (
++        select(Story)
++        .join(Child, Child.id == Story.child_id)
++        .where(Child.family_id == family_id)
++    )
++    if status:
++        q = q.where(Story.status == status)
++    return list(db.execute(q).scalars().all())
+diff --git a/backend/app/routers/children.py b/backend/app/routers/children.py
+index bd24ac6..68c2870 100644
+--- a/backend/app/routers/children.py
++++ b/backend/app/routers/children.py
+@@ -12,21 +12,21 @@ from app.services import child_service
+ router = APIRouter(prefix="/children", tags=["children"])
+ 
+ 
+ @router.post("", response_model=ChildRead, status_code=status.HTTP_201_CREATED)
+ def create_child(
+     payload: ChildCreate,
+     user: User = Depends(get_current_family_user),
+     db: Session = Depends(get_db),
+ ) -> ChildRead:
+     child = child_service.create_child(
+-        db, user.family_id, payload.name, payload.birthdate, payload.pin
++        db, user.family_id, payload.name, payload.birthdate, payload.pin, payload.avatar
+     )
+     return ChildRead.model_validate(child)
+ 
+ 
+ @router.get("", response_model=list[ChildRead])
+ def list_children(
+     user: User = Depends(get_current_family_user),
+     db: Session = Depends(get_db),
+ ) -> list[ChildRead]:
+     return [
+diff --git a/backend/app/routers/lessons.py b/backend/app/routers/lessons.py
+index c51f180..7817155 100644
+--- a/backend/app/routers/lessons.py
++++ b/backend/app/routers/lessons.py
+@@ -31,20 +31,49 @@ def get_lesson(
+     lesson_id: int,
+     child: Child = Depends(get_current_child),
+     db: Session = Depends(get_db),
+ ) -> LessonRead:
+     lesson = lesson_repo.get_for_child(db, child.id, lesson_id)
+     if lesson is None:
+         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lección no encontrada")
+     return LessonRead.model_validate(lesson_service.to_read_dict(lesson))
+ 
+ 
++@router.post("/{lesson_id}/ask", response_model=LessonRead, status_code=status.HTTP_201_CREATED)
++def ask_followup(
++    lesson_id: int,
++    payload: LessonCreate,
++    child: Child = Depends(get_current_child),
++    db: Session = Depends(get_db),
++) -> LessonRead:
++    parent = lesson_repo.get_for_child(db, child.id, lesson_id)
++    if parent is None:
++        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lección no encontrada")
++    try:
++        lesson = lesson_service.continue_conversation(db, child, parent, payload.curiosity)
++    except ModerationError as e:
++        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
++    return LessonRead.model_validate(lesson_service.to_read_dict(lesson))
++
++
++@router.get("/{lesson_id}/thread", response_model=list[LessonRead])
++def lesson_thread(
++    lesson_id: int,
++    child: Child = Depends(get_current_child),
++    db: Session = Depends(get_db),
++) -> list[LessonRead]:
++    turns = lesson_repo.list_thread(db, child.id, lesson_id)
++    if not turns:
++        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lección no encontrada")
++    return [LessonRead.model_validate(lesson_service.to_read_dict(t)) for t in turns]
++
++
+ @router.post("/{lesson_id}/answer", response_model=AnswerResult)
+ def answer_lesson(
+     lesson_id: int,
+     payload: AnswerRequest,
+     child: Child = Depends(get_current_child),
+     db: Session = Depends(get_db),
+ ) -> AnswerResult:
+     lesson = lesson_repo.get_for_child(db, child.id, lesson_id)
+     if lesson is None:
+         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lección no encontrada")
+diff --git a/backend/app/routers/me.py b/backend/app/routers/me.py
+index f4629c8..c14a588 100644
+--- a/backend/app/routers/me.py
++++ b/backend/app/routers/me.py
+@@ -32,11 +32,11 @@ def my_knowledge(
+ def my_suggestions(child: Child = Depends(get_current_child)) -> list[Suggestion]:
+     return [Suggestion(**s) for s in _SUGGESTIONS]
+ 
+ 
+ @router.get("/profile", response_model=ChildProfile)
+ def my_profile(
+     child: Child = Depends(get_current_child),
+     db: Session = Depends(get_db),
+ ) -> ChildProfile:
+     nodes = knowledge_repo.list_for_child(db, child.id)
+-    return ChildProfile(name=child.name, age=child.age, islands=len(nodes))
++    return ChildProfile(name=child.name, age=child.age, islands=len(nodes), avatar=child.avatar)
+diff --git a/backend/app/routers/stories.py b/backend/app/routers/stories.py
+new file mode 100644
+index 0000000..ce83a17
+--- /dev/null
++++ b/backend/app/routers/stories.py
+@@ -0,0 +1,70 @@
++from fastapi import APIRouter, Depends, HTTPException, status
++from sqlalchemy.orm import Session
++
++from app.database import get_db
++from app.deps import get_current_child, get_current_family_user
++from app.models.child import Child
++from app.models.family import User
++from app.repositories import story as story_repo
++from app.schemas.story import StoryRead, StoryReview
++from app.services import story_service
++
++router = APIRouter(tags=["stories"])
++
++
++# ---- Niño ----
++
++@router.post("/me/stories", response_model=StoryRead, status_code=status.HTTP_201_CREATED)
++def create_my_story(
++    child: Child = Depends(get_current_child),
++    db: Session = Depends(get_db),
++) -> StoryRead:
++    story = story_service.create_story(db, child)
++    return StoryRead.model_validate(story)
++
++
++@router.get("/me/stories", response_model=list[StoryRead])
++def my_stories(
++    child: Child = Depends(get_current_child),
++    db: Session = Depends(get_db),
++) -> list[StoryRead]:
++    stories = story_repo.list_for_child(db, child.id, status="approved")
++    return [StoryRead.model_validate(s) for s in stories]
++
++
++@router.get("/me/stories/{story_id}", response_model=StoryRead)
++def my_story(
++    story_id: int,
++    child: Child = Depends(get_current_child),
++    db: Session = Depends(get_db),
++) -> StoryRead:
++    story = story_repo.get_for_child(db, child.id, story_id)
++    if story is None or story.status != "approved":
++        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cuento no encontrado")
++    return StoryRead.model_validate(story)
++
++
++# ---- Familia ----
++
++@router.get("/family/stories", response_model=list[StoryRead])
++def family_stories(
++    status_filter: str | None = None,
++    user: User = Depends(get_current_family_user),
++    db: Session = Depends(get_db),
++) -> list[StoryRead]:
++    stories = story_repo.list_for_family(db, user.family_id, status=status_filter)
++    return [StoryRead.model_validate(s) for s in stories]
++
++
++@router.put("/family/stories/{story_id}", response_model=StoryRead)
++def review_family_story(
++    story_id: int,
++    payload: StoryReview,
++    user: User = Depends(get_current_family_user),
++    db: Session = Depends(get_db),
++) -> StoryRead:
++    story = story_repo.get_for_family(db, user.family_id, story_id)
++    if story is None:
++        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cuento no encontrado")
++    story = story_service.review_story(db, story, payload.action, payload.title, payload.body)
++    return StoryRead.model_validate(story)
+diff --git a/backend/app/schemas/child.py b/backend/app/schemas/child.py
+index 4730fe0..a8c5c76 100644
+--- a/backend/app/schemas/child.py
++++ b/backend/app/schemas/child.py
+@@ -1,31 +1,33 @@
+ from datetime import date
+ 
+ from pydantic import BaseModel, ConfigDict, Field, computed_field
+ 
+ 
+ class ChildCreate(BaseModel):
+     name: str
+     birthdate: date
+     pin: str = Field(min_length=4, max_length=8)
++    avatar: str = "fox"
+ 
+ 
+ class ChildPinLogin(BaseModel):
+     pin: str
+ 
+ 
+ class ChildRead(BaseModel):
+     model_config = ConfigDict(from_attributes=True)
+ 
+     id: int
+     name: str
+     birthdate: date
++    avatar: str
+ 
+     @computed_field
+     @property
+     def age(self) -> int:
+         today = date.today()
+         return (
+             today.year
+             - self.birthdate.year
+             - ((today.month, today.day) < (self.birthdate.month, self.birthdate.day))
+         )
+diff --git a/backend/app/schemas/knowledge.py b/backend/app/schemas/knowledge.py
+index b289fc5..c6f8f3e 100644
+--- a/backend/app/schemas/knowledge.py
++++ b/backend/app/schemas/knowledge.py
+@@ -12,10 +12,11 @@ class KnowledgeNodeRead(BaseModel):
+ 
+ class Suggestion(BaseModel):
+     curiosity: str
+     emoji: str
+ 
+ 
+ class ChildProfile(BaseModel):
+     name: str
+     age: int
+     islands: int
++    avatar: str
+diff --git a/backend/app/schemas/lesson.py b/backend/app/schemas/lesson.py
+index 8e72434..247e0ee 100644
+--- a/backend/app/schemas/lesson.py
++++ b/backend/app/schemas/lesson.py
+@@ -16,10 +16,11 @@ class LessonRead(BaseModel):
+ 
+     id: int
+     curiosity: str
+     subject: str
+     concept: str
+     title: str
+     body: str
+     fun_fact: str
+     answered: bool
+     quiz: QuizPublic
++    follow_ups: list[str] = []
+diff --git a/backend/app/schemas/story.py b/backend/app/schemas/story.py
+new file mode 100644
+index 0000000..fa0ee89
+--- /dev/null
++++ b/backend/app/schemas/story.py
+@@ -0,0 +1,18 @@
++from typing import Literal
++
++from pydantic import BaseModel, ConfigDict
++
++
++class StoryRead(BaseModel):
++    model_config = ConfigDict(from_attributes=True)
++
++    id: int
++    title: str
++    body: str
++    status: str
++
++
++class StoryReview(BaseModel):
++    action: Literal["approve", "reject"]
++    title: str | None = None
++    body: str | None = None
+diff --git a/backend/app/services/ai_providers.py b/backend/app/services/ai_providers.py
+index f341f5b..d217cb8 100644
+--- a/backend/app/services/ai_providers.py
++++ b/backend/app/services/ai_providers.py
+@@ -11,32 +11,71 @@ from app.services.ai_catalog import DEFAULT_LOCAL_MODEL
+ from app.services.lesson_generator import (
+     SUBJECTS,
+     GeneratedLesson,
+     LessonGenerator,
+     StubLessonGenerator,
+ )
+ 
+ _TIMEOUT = 120.0
+ 
+ 
++def _age_band(age: int) -> str:
++    if age <= 5:
++        return (
++            "Edad 3-5 (aún no lee bien): 2 o 3 frases muy cortas, palabras muy sencillas y "
++            "algún sonido divertido (¡pum!, ¡splash!). Compara con cosas que ve cada día "
++            "(juguetes, animales, comida). Quiz muy fácil."
++        )
++    if age <= 8:
++        return (
++            "Edad 6-8: 4 a 6 frases. Una analogía clara del día a día y un porqué sencillo. "
++            "Quiz de dificultad media."
++        )
++    return (
++        "Edad 9-12: 6 a 9 frases. Puedes introducir UNA palabra nueva y explicarla. Muestra "
++        "una causa y su efecto, y propón un pequeño reto del mundo real. Quiz algo más exigente."
++    )
++
++
+ def _system_prompt(age: int) -> str:
+     return (
+-        f"Eres un generador de mini-lecciones para un niño de {age} años. "
+-        "Responde SOLO con JSON válido, sin texto adicional ni markdown. "
+-        "Contenido apropiado para su edad, en español, breve y positivo. "
+-        'Forma exacta: {"subject": "ciencia|matematicas|lenguaje|arte|cultura", '
+-        '"concept": "...", "title": "...", "body": "...", "fun_fact": "...", '
++        f"Eres Chispa, un guía cálido y curioso que ayuda a un niño de {age} años a resolver "
++        "su curiosidad CON CONOCIMIENTO. Hablas como alguien mayor que sabe mucho y disfruta "
++        "enseñando: cercano, con asombro, nunca por encima del niño.\n"
++        "Pedagogía:\n"
++        "- Ancla TODO a la pregunta del niño (su curiosidad es la misión).\n"
++        "- Enseña UNA sola idea clara (un '¡ajá!'), sin abrumar.\n"
++        "- Usa una analogía de su mundo (juguetes, animales, comida, juegos).\n"
++        "- Añade un dato sorprendente que despierte más ganas de saber.\n"
++        "- Termina invitando a seguir preguntando.\n"
++        "- Sé veraz y apropiado a su edad; no inventes.\n"
++        f"Estilo para esta edad: {_age_band(age)}\n"
++        "El quiz es práctica de recuerdo: 3 opciones de longitud parecida (número de palabras "
++        "similar); ninguna debe destacar por formato o longitud; solo una correcta.\n"
++        "'follow_ups' son 2 o 3 preguntas cortas y atractivas, en la voz del niño, que podría "
++        "hacer a continuación para profundizar.\n"
++        "Responde SOLO con JSON válido, sin texto adicional ni markdown. Forma exacta: "
++        '{"subject": "ciencia|matematicas|lenguaje|arte|cultura", "concept": "...", '
++        '"title": "...", "body": "...", "fun_fact": "...", '
++        '"follow_ups": ["...", "...", "..."], '
+         '"quiz": {"question": "...", "options": ["a","b","c"], "correct_index": 0, "explanation": "..."}}'
+     )
+ 
+ 
+-def _user_prompt(curiosity: str, subject: str | None) -> str:
++def _user_prompt(curiosity: str, subject: str | None, history: list[tuple[str, str]] | None = None) -> str:
++    if history:
++        convo = "\n".join(f"Niño: {q}\nChispa: {a}" for q, a in history)
++        return (
++            "Conversación hasta ahora:\n" + convo + "\n\n"
++            f"El niño continúa preguntando: «{curiosity}». Responde SIGUIENDO el hilo, "
++            "sin repetir lo ya dicho, profundizando un poco más. Genera la lección en JSON."
++        )
+     extra = f" Teje la materia '{subject}'." if subject in SUBJECTS else ""
+     return f"Curiosidad del niño: «{curiosity}».{extra} Genera la lección en JSON."
+ 
+ 
+ def _strip_fences(text: str) -> str:
+     t = text.strip()
+     if t.startswith("```"):
+         t = t.split("\n", 1)[1] if "\n" in t else t
+         t = t.rsplit("```", 1)[0]
+     return t.strip()
+@@ -47,72 +86,75 @@ def _parse_lesson(text: str, curiosity: str, subject: str | None) -> GeneratedLe
+     quiz = data["quiz"]
+     options = list(quiz["options"])[:3]
+     if len(options) != 3:
+         raise ValueError("el quiz debe tener 3 opciones")
+     idx = int(quiz["correct_index"])
+     if not 0 <= idx < 3:
+         raise ValueError("correct_index fuera de rango")
+     chosen = data.get("subject") if data.get("subject") in SUBJECTS else (
+         subject if subject in SUBJECTS else SUBJECTS[len(curiosity.strip()) % len(SUBJECTS)]
+     )
++    raw_fu = data.get("follow_ups")
++    follow_ups = [str(x) for x in raw_fu][:3] if isinstance(raw_fu, list) else []
+     return GeneratedLesson(
+         subject=chosen,
+         concept=str(data["concept"])[:120],
+         title=str(data["title"])[:200],
+         body=str(data["body"]),
+         fun_fact=str(data["fun_fact"]),
+         quiz_question=str(quiz["question"])[:300],
+         quiz_options=[str(o) for o in options],
+         quiz_correct_index=idx,
+         quiz_explanation=str(quiz["explanation"]),
++        follow_ups=follow_ups,
+     )
+ 
+ 
+ class ClaudeGenerator:
+     def __init__(self, api_key: str, model: str) -> None:
+         self.api_key = api_key
+         self.model = model
+ 
+-    def generate(self, curiosity: str, age: int, subject: str | None) -> GeneratedLesson:
++    def generate(self, curiosity: str, age: int, subject: str | None, history: list[tuple[str, str]] | None = None) -> GeneratedLesson:
+         resp = httpx.post(
+             "https://api.anthropic.com/v1/messages",
+             headers={
+                 "x-api-key": self.api_key,
+                 "anthropic-version": "2023-06-01",
+                 "content-type": "application/json",
+             },
+             json={
+                 "model": self.model,
+-                "max_tokens": 800,
++                "max_tokens": 1400,
+                 "system": _system_prompt(age),
+-                "messages": [{"role": "user", "content": _user_prompt(curiosity, subject)}],
++                "messages": [{"role": "user", "content": _user_prompt(curiosity, subject, history)}],
+             },
+             timeout=_TIMEOUT,
+         )
+         resp.raise_for_status()
+         text = resp.json()["content"][0]["text"]
+         return _parse_lesson(text, curiosity, subject)
+ 
+ 
+ class OllamaGenerator:
+     def __init__(self, base_url: str, model: str) -> None:
+         self.base_url = base_url.rstrip("/")
+         self.model = model
+ 
+-    def generate(self, curiosity: str, age: int, subject: str | None) -> GeneratedLesson:
++    def generate(self, curiosity: str, age: int, subject: str | None, history: list[tuple[str, str]] | None = None) -> GeneratedLesson:
+         resp = httpx.post(
+             f"{self.base_url}/api/chat",
+             json={
+                 "model": self.model,
+                 "messages": [
+                     {"role": "system", "content": _system_prompt(age)},
+-                    {"role": "user", "content": _user_prompt(curiosity, subject)},
++                    {"role": "user", "content": _user_prompt(curiosity, subject, history)},
+                 ],
+                 "stream": False,
+                 "format": "json",
+             },
+             timeout=_TIMEOUT,
+         )
+         resp.raise_for_status()
+         text = resp.json()["message"]["content"]
+         return _parse_lesson(text, curiosity, subject)
+ 
+@@ -124,48 +166,48 @@ class OpenAICompatGenerator:
+         "openai": "https://api.openai.com/v1",
+         "deepseek": "https://api.deepseek.com/v1",
+         "kimi": "https://api.moonshot.cn/v1",
+     }
+ 
+     def __init__(self, provider: str, api_key: str, model: str) -> None:
+         self.base = self._BASES[provider]
+         self.api_key = api_key
+         self.model = model
+ 
+-    def generate(self, curiosity: str, age: int, subject: str | None) -> GeneratedLesson:
++    def generate(self, curiosity: str, age: int, subject: str | None, history: list[tuple[str, str]] | None = None) -> GeneratedLesson:
+         resp = httpx.post(
+             f"{self.base}/chat/completions",
+             headers={"Authorization": f"Bearer {self.api_key}"},
+             json={
+                 "model": self.model,
+                 "messages": [
+                     {"role": "system", "content": _system_prompt(age)},
+-                    {"role": "user", "content": _user_prompt(curiosity, subject)},
++                    {"role": "user", "content": _user_prompt(curiosity, subject, history)},
+                 ],
+                 "response_format": {"type": "json_object"},
+             },
+             timeout=_TIMEOUT,
+         )
+         resp.raise_for_status()
+         text = resp.json()["choices"][0]["message"]["content"]
+         return _parse_lesson(text, curiosity, subject)
+ 
+ 
+ class GeminiGenerator:
+     """Google Gemini (preparado)."""
+ 
+     def __init__(self, api_key: str, model: str) -> None:
+         self.api_key = api_key
+         self.model = model
+ 
+-    def generate(self, curiosity: str, age: int, subject: str | None) -> GeneratedLesson:
+-        prompt = _system_prompt(age) + "\n\n" + _user_prompt(curiosity, subject)
++    def generate(self, curiosity: str, age: int, subject: str | None, history: list[tuple[str, str]] | None = None) -> GeneratedLesson:
++        prompt = _system_prompt(age) + "\n\n" + _user_prompt(curiosity, subject, history)
+         resp = httpx.post(
+             f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent",
+             params={"key": self.api_key},
+             json={
+                 "contents": [{"parts": [{"text": prompt}]}],
+                 "generationConfig": {"responseMimeType": "application/json"},
+             },
+             timeout=_TIMEOUT,
+         )
+         resp.raise_for_status()
+diff --git a/backend/app/services/child_service.py b/backend/app/services/child_service.py
+index 7efb1e2..52ce3a3 100644
+--- a/backend/app/services/child_service.py
++++ b/backend/app/services/child_service.py
+@@ -1,21 +1,21 @@
+ from datetime import date
+ 
+ from sqlalchemy.orm import Session
+ 
+ from app.models.child import Child
+ from app.repositories import child as child_repo
+ from app.security import hash_secret, verify_secret
+ 
+ 
+-def create_child(db: Session, family_id: int, name: str, birthdate: date, pin: str) -> Child:
+-    return child_repo.create_child(db, family_id, name, birthdate, hash_secret(pin))
++def create_child(db: Session, family_id: int, name: str, birthdate: date, pin: str, avatar: str = "fox") -> Child:
++    return child_repo.create_child(db, family_id, name, birthdate, hash_secret(pin), avatar)
+ 
+ 
+ def list_children(db: Session, family_id: int) -> list[Child]:
+     return child_repo.list_children(db, family_id)
+ 
+ 
+ def verify_child_pin(db: Session, family_id: int, child_id: int, pin: str) -> Child | None:
+     child = child_repo.get_child_for_family(db, family_id, child_id)
+     if child and verify_secret(pin, child.pin_hash):
+         return child
+diff --git a/backend/app/services/lesson_generator.py b/backend/app/services/lesson_generator.py
+index 3ebaefe..cd6619e 100644
+--- a/backend/app/services/lesson_generator.py
++++ b/backend/app/services/lesson_generator.py
+@@ -1,50 +1,63 @@
+-from dataclasses import dataclass
++from dataclasses import dataclass, field
+ from typing import Protocol
+ 
+ SUBJECTS = ["ciencia", "matematicas", "lenguaje", "arte", "cultura"]
+ 
+ 
+ @dataclass
+ class GeneratedLesson:
+     subject: str
+     concept: str
+     title: str
+     body: str
+     fun_fact: str
+     quiz_question: str
+     quiz_options: list[str]
+     quiz_correct_index: int
+     quiz_explanation: str
++    follow_ups: list[str] = field(default_factory=list)
+ 
+ 
+ class LessonGenerator(Protocol):
+-    def generate(self, curiosity: str, age: int, subject: str | None) -> GeneratedLesson: ...
++    def generate(
++        self, curiosity: str, age: int, subject: str | None,
++        history: list[tuple[str, str]] | None = None,
++    ) -> GeneratedLesson: ...
+ 
+ 
+ class StubLessonGenerator:
+     """Generador determinista de marcador de posición (sin IA externa).
+ 
+     Costura para un adaptador real (LLM) que implementará la misma interfaz.
+     """
+ 
+-    def generate(self, curiosity: str, age: int, subject: str | None) -> GeneratedLesson:
++    def generate(self, curiosity: str, age: int, subject: str | None, history: list[tuple[str, str]] | None = None) -> GeneratedLesson:
+         clean = curiosity.strip()
+         chosen = subject if subject in SUBJECTS else SUBJECTS[len(clean) % len(SUBJECTS)]
+         concept = clean.rstrip("?¿! ").lower()[:120] or "descubrimiento"
+         title = clean[:1].upper() + clean[1:] if clean else "Tu curiosidad"
+         body = (
+-            f"Vamos a explorar «{clean}». Para tus {age} años, lo importante es observar y "
+-            f"hacer preguntas. Cada respuesta abre una isla nueva en tu archipiélago."
++            f"¡Buena pregunta! Vamos a descubrir «{clean}» juntos. Para tus {age} años, lo "
++            f"importante es observar el mundo y atreverte a preguntar. Cada cosa que te "
++            f"sorprende esconde un porqué, y cada porqué que descubres se convierte en una "
++            f"isla nueva de tu archipiélago. ¿Sigues la pista de esta curiosidad?"
+         )
+-        fun_fact = f"Dato curioso: casi nadie se pregunta «{clean}», ¡y es fascinante!"
++        if history:
++            body = "Sigamos con nuestra conversación. " + body
++        fun_fact = f"¿Sabías que casi nadie se detiene a pensar en «{clean}»? ¡Tú sí, y eso es de exploradores!"
+         return GeneratedLesson(
+             subject=chosen,
+             concept=concept,
+             title=title,
+             body=body,
+             fun_fact=fun_fact,
+-            quiz_question=f"¿Qué es lo mejor para aprender sobre «{clean}»?",
+-            quiz_options=["Adivinar sin mirar", "Observar y preguntar", "No hacer nada"],
++            quiz_question=f"¿Qué es lo mejor para descubrir sobre «{clean}»?",
++            quiz_options=["Adivinar sin mirar", "Observar y preguntar", "Quedarme quieto"],
+             quiz_correct_index=1,
+             quiz_explanation="Observar y preguntar es la mejor forma de descubrir.",
++            follow_ups=[
++                f"¿Por qué ocurre «{clean}»?",
++                "¿Me das un ejemplo divertido?",
++                "¿Qué más puedo descubrir de esto?",
++            ],
+         )
+diff --git a/backend/app/services/lesson_service.py b/backend/app/services/lesson_service.py
+index fed3cc4..856ddc1 100644
+--- a/backend/app/services/lesson_service.py
++++ b/backend/app/services/lesson_service.py
+@@ -31,22 +31,62 @@ def create_lesson(db: Session, child: Child, curiosity: str, subject: str | None
+         curiosity=curiosity,
+         subject=g.subject,
+         concept=g.concept,
+         title=g.title,
+         body=g.body,
+         fun_fact=g.fun_fact,
+         quiz_question=g.quiz_question,
+         quiz_options=g.quiz_options,
+         quiz_correct_index=g.quiz_correct_index,
+         quiz_explanation=g.quiz_explanation,
++        follow_ups=g.follow_ups,
+     )
+-    return lesson_repo.create(db, lesson)
++    lesson = lesson_repo.create(db, lesson)
++    knowledge_repo.ensure_node(db, child.id, lesson.concept, lesson.subject)
++    return lesson
++
++
++def continue_conversation(db: Session, child: Child, parent: Lesson, question: str) -> Lesson:
++    check_curiosity(question)
++    root_id = parent.root_id or parent.id
++    thread = lesson_repo.list_thread(db, child.id, root_id)
++    history = [(t.curiosity, t.body) for t in thread]
++    cfg = ai_config_repo.get_or_create(db, child.family_id)
++    generator = build_generator(cfg)
++    try:
++        g = generator.generate(question, age=child.age, subject=None, history=history)
++    except Exception:
++        g = _stub.generate(question, age=child.age, subject=None, history=history)
++    try:
++        cfg.used_count += 1
++        db.commit()
++    except Exception:
++        db.rollback()
++    lesson = Lesson(
++        child_id=child.id,
++        curiosity=question,
++        subject=g.subject,
++        concept=g.concept,
++        title=g.title,
++        body=g.body,
++        fun_fact=g.fun_fact,
++        quiz_question=g.quiz_question,
++        quiz_options=g.quiz_options,
++        quiz_correct_index=g.quiz_correct_index,
++        quiz_explanation=g.quiz_explanation,
++        follow_ups=g.follow_ups,
++        parent_id=parent.id,
++        root_id=root_id,
++    )
++    lesson = lesson_repo.create(db, lesson)
++    knowledge_repo.ensure_node(db, child.id, lesson.concept, lesson.subject)
++    return lesson
+ 
+ 
+ def answer_lesson(db: Session, child: Child, lesson, choice_index: int) -> dict:
+     correct = choice_index == lesson.quiz_correct_index
+     if correct and not lesson.answered:
+         lesson.answered = True
+         db.commit()
+         knowledge_repo.upsert_node(db, child.id, lesson.concept, lesson.subject)
+     return {
+         "correct": correct,
+@@ -59,11 +99,12 @@ def to_read_dict(lesson: Lesson) -> dict:
+     return {
+         "id": lesson.id,
+         "curiosity": lesson.curiosity,
+         "subject": lesson.subject,
+         "concept": lesson.concept,
+         "title": lesson.title,
+         "body": lesson.body,
+         "fun_fact": lesson.fun_fact,
+         "answered": lesson.answered,
+         "quiz": {"question": lesson.quiz_question, "options": lesson.quiz_options},
++        "follow_ups": lesson.follow_ups or [],
+     }
+diff --git a/backend/app/services/story_generator.py b/backend/app/services/story_generator.py
+new file mode 100644
+index 0000000..b187042
+--- /dev/null
++++ b/backend/app/services/story_generator.py
+@@ -0,0 +1,33 @@
++from dataclasses import dataclass
++
++
++@dataclass
++class GeneratedStory:
++    title: str
++    body: str
++
++
++class StubStoryGenerator:
++    """Cuento determinista a partir de los conceptos que el niño ha explorado.
++
++    Costura para un generador real (LLM) que implementará la misma interfaz.
++    """
++
++    def generate(self, child_name: str, age: int, concepts: list[str]) -> GeneratedStory:
++        if concepts:
++            tema = ", ".join(concepts[:3])
++            cuerpo = (
++                f"Érase una vez {child_name}, un explorador muy curioso de {age} años. "
++                f"En su archipiélago había descubierto islas mágicas sobre {tema}. "
++                f"Una mañana, {child_name} montó en su barquito y navegó hacia la isla de "
++                f"{concepts[0]}. Allí aprendió que cada pregunta abre una puerta nueva. "
++                f"Al volver a casa, {child_name} se durmió feliz, soñando con la próxima aventura."
++            )
++            titulo = f"La aventura de {child_name} y {concepts[0]}"
++        else:
++            cuerpo = (
++                f"Érase una vez {child_name}, un explorador de {age} años con muchas ganas "
++                f"de descubrir el mundo. Su aventura no ha hecho más que empezar."
++            )
++            titulo = f"El comienzo de {child_name}"
++        return GeneratedStory(title=titulo, body=cuerpo)
+diff --git a/backend/app/services/story_service.py b/backend/app/services/story_service.py
+new file mode 100644
+index 0000000..4e55f5f
+--- /dev/null
++++ b/backend/app/services/story_service.py
+@@ -0,0 +1,35 @@
++from sqlalchemy.orm import Session
++
++from app.models.child import Child
++from app.models.story import Story, _utcnow
++from app.repositories import knowledge as knowledge_repo
++from app.repositories import story as story_repo
++from app.services.story_generator import StubStoryGenerator
++
++_generator = StubStoryGenerator()
++
++
++def create_story(db: Session, child: Child) -> Story:
++    nodes = knowledge_repo.list_for_child(db, child.id)
++    concepts = [n.concept for n in nodes]
++    g = _generator.generate(child.name, child.age, concepts)
++    story = Story(child_id=child.id, title=g.title, body=g.body, status="pending")
++    return story_repo.create(db, story)
++
++
++def review_story(
++    db: Session,
++    story: Story,
++    action: str,
++    title: str | None = None,
++    body: str | None = None,
++) -> Story:
++    if title is not None:
++        story.title = title
++    if body is not None:
++        story.body = body
++    story.status = "approved" if action == "approve" else "rejected"
++    story.reviewed_at = _utcnow()
++    db.commit()
++    db.refresh(story)
++    return story
+diff --git a/backend/tests/test_ai_providers.py b/backend/tests/test_ai_providers.py
+index b91f893..c7dd572 100644
+--- a/backend/tests/test_ai_providers.py
++++ b/backend/tests/test_ai_providers.py
+@@ -12,20 +12,21 @@ from app.services.ai_providers import (
+     build_generator,
+ )
+ from app.services.lesson_generator import StubLessonGenerator
+ 
+ _LESSON_JSON = json.dumps({
+     "subject": "ciencia",
+     "concept": "lluvia",
+     "title": "¿Por qué llueve?",
+     "body": "El agua sube y baja.",
+     "fun_fact": "Las nubes pesan mucho.",
++    "follow_ups": ["¿De dónde viene el agua?", "¿Por qué hay nubes?", "¿Qué es la niebla?"],
+     "quiz": {"question": "¿Qué cae?", "options": ["sol", "agua", "viento"], "correct_index": 1, "explanation": "Cae agua."},
+ })
+ 
+ 
+ class _FakeResp:
+     def __init__(self, payload):
+         self._payload = payload
+ 
+     def raise_for_status(self):
+         return None
+@@ -38,20 +39,22 @@ def test_claude_generator_parses(monkeypatch):
+     def fake_post(url, **kwargs):
+         assert "api.anthropic.com" in url
+         return _FakeResp({"content": [{"text": _LESSON_JSON}]})
+ 
+     monkeypatch.setattr(httpx, "post", fake_post)
+     g = ClaudeGenerator(api_key="k", model="claude-haiku-4-5")
+     lesson = g.generate("¿por qué llueve?", age=7, subject=None)
+     assert lesson.subject == "ciencia"
+     assert lesson.quiz_correct_index == 1
+     assert len(lesson.quiz_options) == 3
++    assert isinstance(lesson.follow_ups, list)
++    assert len(lesson.follow_ups) == 3
+ 
+ 
+ def test_ollama_generator_parses(monkeypatch):
+     def fake_post(url, **kwargs):
+         assert url.endswith("/api/chat")
+         return _FakeResp({"message": {"content": _LESSON_JSON}})
+ 
+     monkeypatch.setattr(httpx, "post", fake_post)
+     g = OllamaGenerator(base_url="http://ollama:11434", model="qwen3:4b")
+     lesson = g.generate("dinosaurios", age=8, subject="arte")
+diff --git a/backend/tests/test_answer_api.py b/backend/tests/test_answer_api.py
+index 33ad530..2862877 100644
+--- a/backend/tests/test_answer_api.py
++++ b/backend/tests/test_answer_api.py
+@@ -35,24 +35,32 @@ def test_correct_answer_creates_knowledge_node(client, db_session):
+     )
+     assert r.status_code == 200
+     assert r.json()["correct"] is True
+     nodes = db_session.execute(
+         select(KnowledgeNode).where(KnowledgeNode.child_id == child_id)
+     ).scalars().all()
+     assert len(nodes) == 1
+     assert nodes[0].concept == lesson["concept"]
+ 
+ 
+-def test_wrong_answer_creates_no_node(client, db_session):
++def test_wrong_answer_does_not_increase_mastery(client, db_session):
+     child_id, token = _child_token(db_session)
+     lesson = _make_lesson(client, token)
++    # Node is auto-created when lesson is generated (ensure_node)
++    nodes_before = db_session.execute(
++        select(KnowledgeNode).where(KnowledgeNode.child_id == child_id)
++    ).scalars().all()
++    assert len(nodes_before) == 1
++    mastery_before = nodes_before[0].mastery
+     r = client.post(
+         f"/lessons/{lesson['id']}/answer",
+         headers={"Authorization": f"Bearer {token}"},
+         json={"choice_index": 0},
+     )
+     assert r.status_code == 200
+     assert r.json()["correct"] is False
++    db_session.expire_all()
+     nodes = db_session.execute(
+         select(KnowledgeNode).where(KnowledgeNode.child_id == child_id)
+     ).scalars().all()
+-    assert len(nodes) == 0
++    assert len(nodes) == 1
++    assert nodes[0].mastery == mastery_before
+diff --git a/backend/tests/test_children.py b/backend/tests/test_children.py
+index e1b799a..d6de313 100644
+--- a/backend/tests/test_children.py
++++ b/backend/tests/test_children.py
+@@ -35,10 +35,32 @@ def test_child_pin_login(client):
+     ok = client.post(f"/children/{child['id']}/login", headers=headers, json={"pin": "1234"})
+     assert ok.status_code == 200
+     assert ok.json()["access_token"]
+ 
+     bad = client.post(f"/children/{child['id']}/login", headers=headers, json={"pin": "0000"})
+     assert bad.status_code == 401
+ 
+ 
+ def test_list_children_requires_auth(client):
+     assert client.get("/children").status_code == 401
++
++
++def test_child_default_avatar(client):
++    headers = _auth_headers(client)
++    r = client.post(
++        "/children",
++        headers=headers,
++        json={"name": "Sofía", "birthdate": "2019-03-15", "pin": "5678"},
++    )
++    assert r.status_code == 201
++    assert r.json()["avatar"] == "fox"
++
++
++def test_child_custom_avatar(client):
++    headers = _auth_headers(client)
++    r = client.post(
++        "/children",
++        headers=headers,
++        json={"name": "Pedro", "birthdate": "2017-07-20", "pin": "4321", "avatar": "rocket"},
++    )
++    assert r.status_code == 201
++    assert r.json()["avatar"] == "rocket"
+diff --git a/backend/tests/test_conversation.py b/backend/tests/test_conversation.py
+new file mode 100644
+index 0000000..6881eba
+--- /dev/null
++++ b/backend/tests/test_conversation.py
+@@ -0,0 +1,205 @@
++"""Tests for conversational lesson threads (Task B2a)."""
++from datetime import date
++
++from sqlalchemy import select
++
++from app.models.child import Child
++from app.models.family import Family
++from app.models.knowledge import KnowledgeNode
++from app.security import create_token
++
++
++def _child_token(db_session):
++    fam = Family(name="F")
++    db_session.add(fam)
++    db_session.flush()
++    child = Child(family_id=fam.id, name="Leo", birthdate=date(2018, 1, 1), pin_hash="x")
++    db_session.add(child)
++    db_session.commit()
++    return child.id, create_token(subject=str(child.id), token_type="child")
++
++
++def _make_lesson(client, token, curiosity="¿por qué llueve?"):
++    r = client.post(
++        "/lessons",
++        headers={"Authorization": f"Bearer {token}"},
++        json={"curiosity": curiosity},
++    )
++    assert r.status_code == 201
++    return r.json()
++
++
++def test_create_root_lesson_auto_creates_island(client, db_session):
++    """Creating a root lesson creates a knowledge node without answering the quiz."""
++    child_id, token = _child_token(db_session)
++    h = {"Authorization": f"Bearer {token}"}
++
++    # No knowledge before lesson
++    assert client.get("/me/knowledge", headers=h).json() == []
++
++    # Create root lesson
++    lesson = _make_lesson(client, token)
++
++    # Island should exist automatically (without quiz answer)
++    nodes = client.get("/me/knowledge", headers=h).json()
++    assert len(nodes) == 1
++    assert nodes[0]["concept"] == lesson["concept"]
++
++
++def test_ask_followup_creates_new_turn(client, db_session):
++    """POST /lessons/{root}/ask returns 201 and a new turn."""
++    child_id, token = _child_token(db_session)
++    h = {"Authorization": f"Bearer {token}"}
++
++    root = _make_lesson(client, token, "¿por qué llueve?")
++
++    r = client.post(
++        f"/lessons/{root['id']}/ask",
++        headers=h,
++        json={"curiosity": "¿y por qué a veces nieva?"},
++    )
++    assert r.status_code == 201
++    child_turn = r.json()
++    assert child_turn["id"] != root["id"]
++    assert child_turn["curiosity"] == "¿y por qué a veces nieva?"
++
++
++def test_thread_returns_both_turns_in_order(client, db_session):
++    """GET /lessons/{root}/thread returns root + child turn in order."""
++    child_id, token = _child_token(db_session)
++    h = {"Authorization": f"Bearer {token}"}
++
++    root = _make_lesson(client, token, "¿por qué llueve?")
++
++    r = client.post(
++        f"/lessons/{root['id']}/ask",
++        headers=h,
++        json={"curiosity": "¿y por qué a veces nieva?"},
++    )
++    assert r.status_code == 201
++    child_turn = r.json()
++
++    # Thread from root
++    thread_r = client.get(f"/lessons/{root['id']}/thread", headers=h)
++    assert thread_r.status_code == 200
++    thread = thread_r.json()
++    assert len(thread) == 2
++    assert thread[0]["id"] == root["id"]
++    assert thread[1]["id"] == child_turn["id"]
++
++
++def test_thread_of_child_equals_thread_of_root(client, db_session):
++    """Thread accessed via child turn ID == thread accessed via root ID."""
++    child_id, token = _child_token(db_session)
++    h = {"Authorization": f"Bearer {token}"}
++
++    root = _make_lesson(client, token, "¿por qué llueve?")
++    r = client.post(
++        f"/lessons/{root['id']}/ask",
++        headers=h,
++        json={"curiosity": "¿y por qué a veces nieva?"},
++    )
++    child_turn = r.json()
++
++    thread_via_root = client.get(f"/lessons/{root['id']}/thread", headers=h).json()
++    thread_via_child = client.get(f"/lessons/{child_turn['id']}/thread", headers=h).json()
++
++    assert [t["id"] for t in thread_via_root] == [t["id"] for t in thread_via_child]
++
++
++def test_ensure_node_does_not_increase_mastery(client, db_session):
++    """Creating multiple turns with the same concept leaves mastery unchanged (no quiz answered)."""
++    child_id, token = _child_token(db_session)
++    h = {"Authorization": f"Bearer {token}"}
++
++    # The stub generates a concept from the curiosity text.
++    root = _make_lesson(client, token, "¿por qué llueve?")
++
++    nodes_after_root = db_session.execute(
++        select(KnowledgeNode).where(KnowledgeNode.child_id == child_id)
++    ).scalars().all()
++    assert len(nodes_after_root) >= 1
++    mastery_after_root = {n.concept: n.mastery for n in nodes_after_root}
++
++    # Create a second turn (ensure_node is called again — should NOT change mastery)
++    client.post(
++        f"/lessons/{root['id']}/ask",
++        headers=h,
++        json={"curiosity": "¿y por qué a veces hay tormenta?"},
++    )
++
++    db_session.expire_all()
++    nodes_after_turn = db_session.execute(
++        select(KnowledgeNode).where(KnowledgeNode.child_id == child_id)
++    ).scalars().all()
++    mastery_after_turn = {n.concept: n.mastery for n in nodes_after_turn}
++
++    # For any concept that existed after root lesson, mastery must not have increased
++    for concept, mastery_before in mastery_after_root.items():
++        assert mastery_after_turn.get(concept, mastery_before) == mastery_before
++
++
++def test_correct_quiz_answer_increases_mastery(client, db_session):
++    """A correct quiz answer increases mastery (upsert_node behavior preserved)."""
++    child_id, token = _child_token(db_session)
++    h = {"Authorization": f"Bearer {token}"}
++
++    lesson = _make_lesson(client, token, "¿por qué llueve?")
++
++    # Node is auto-created at lesson creation with default mastery (model default=1)
++    nodes_before = db_session.execute(
++        select(KnowledgeNode).where(KnowledgeNode.child_id == child_id)
++    ).scalars().all()
++    assert len(nodes_before) == 1
++    mastery_before = nodes_before[0].mastery
++
++    # Answer quiz correctly (stub: correct_index=1) — should increase mastery
++    r = client.post(
++        f"/lessons/{lesson['id']}/answer",
++        headers=h,
++        json={"choice_index": 1},
++    )
++    assert r.status_code == 200
++    assert r.json()["correct"] is True
++
++    db_session.expire_all()
++    nodes_after = db_session.execute(
++        select(KnowledgeNode).where(KnowledgeNode.child_id == child_id)
++    ).scalars().all()
++    assert len(nodes_after) == 1
++    assert nodes_after[0].mastery == mastery_before + 1
++
++
++def test_ask_followup_404_on_unknown_lesson(client, db_session):
++    """POST /lessons/9999/ask returns 404 when lesson does not exist."""
++    child_id, token = _child_token(db_session)
++    h = {"Authorization": f"Bearer {token}"}
++    r = client.post(
++        "/lessons/9999/ask",
++        headers=h,
++        json={"curiosity": "¿qué es eso?"},
++    )
++    assert r.status_code == 404
++
++
++def test_thread_404_on_unknown_lesson(client, db_session):
++    """GET /lessons/9999/thread returns 404 when lesson does not exist."""
++    child_id, token = _child_token(db_session)
++    h = {"Authorization": f"Bearer {token}"}
++    r = client.get("/lessons/9999/thread", headers=h)
++    assert r.status_code == 404
++
++
++def test_ask_followup_blocked_by_moderation(client, db_session):
++    """POST /lessons/{id}/ask returns 422 on moderated curiosity."""
++    child_id, token = _child_token(db_session)
++    h = {"Authorization": f"Bearer {token}"}
++
++    root = _make_lesson(client, token, "¿por qué llueve?")
++
++    r = client.post(
++        f"/lessons/{root['id']}/ask",
++        headers=h,
++        json={"curiosity": "quiero ver armas"},
++    )
++    assert r.status_code == 422
+diff --git a/backend/tests/test_lesson_generator.py b/backend/tests/test_lesson_generator.py
+index 7c1389c..95fc7aa 100644
+--- a/backend/tests/test_lesson_generator.py
++++ b/backend/tests/test_lesson_generator.py
+@@ -10,10 +10,17 @@ def test_stub_is_deterministic_and_well_formed():
+     assert len(a.quiz_options) == 3
+     assert 0 <= a.quiz_correct_index < 3
+     assert a.concept
+     assert "llueve" in a.body.lower() or "llueve" in a.title.lower()
+ 
+ 
+ def test_stub_respects_forced_subject():
+     gen = StubLessonGenerator()
+     g = gen.generate("dinosaurios", age=8, subject="arte")
+     assert g.subject == "arte"
++
++
++def test_stub_follow_ups_not_empty_and_bounded():
++    gen = StubLessonGenerator()
++    g = gen.generate("¿cómo vuelan los pájaros?", age=7, subject=None)
++    assert len(g.follow_ups) > 0
++    assert len(g.follow_ups) <= 3
+diff --git a/backend/tests/test_lessons_api.py b/backend/tests/test_lessons_api.py
+index 0174ac0..cf02c76 100644
+--- a/backend/tests/test_lessons_api.py
++++ b/backend/tests/test_lessons_api.py
+@@ -21,20 +21,22 @@ def test_create_lesson_returns_quiz_without_answer(client, db_session):
+         "/lessons",
+         headers={"Authorization": f"Bearer {token}"},
+         json={"curiosity": "¿por qué llueve?"},
+     )
+     assert r.status_code == 201
+     body = r.json()
+     assert body["quiz"]["question"]
+     assert len(body["quiz"]["options"]) == 3
+     assert "correct_index" not in body["quiz"]
+     assert body["answered"] is False
++    assert "follow_ups" in body
++    assert isinstance(body["follow_ups"], list)
+ 
+ 
+ def test_create_lesson_blocked_by_moderation(client, db_session):
+     token = _child_token(db_session)
+     r = client.post(
+         "/lessons",
+         headers={"Authorization": f"Bearer {token}"},
+         json={"curiosity": "quiero ver armas"},
+     )
+     assert r.status_code == 422
+diff --git a/backend/tests/test_me_profile.py b/backend/tests/test_me_profile.py
+index 70e08aa..0338d25 100644
+--- a/backend/tests/test_me_profile.py
++++ b/backend/tests/test_me_profile.py
+@@ -17,18 +17,19 @@ def _child_token(db_session):
+ 
+ def test_profile_returns_name_age_islands(client, db_session):
+     token = _child_token(db_session)
+     h = {"Authorization": f"Bearer {token}"}
+     r = client.get("/me/profile", headers=h)
+     assert r.status_code == 200
+     body = r.json()
+     assert body["name"] == "Nora"
+     assert body["age"] >= 6
+     assert body["islands"] == 0
++    assert body["avatar"] == "fox"
+     # Tras acertar una lección, sube a 1
+     lesson = client.post("/lessons", headers=h, json={"curiosity": "¿por qué llueve?"}).json()
+     client.post(f"/lessons/{lesson['id']}/answer", headers=h, json={"choice_index": 1})
+     assert client.get("/me/profile", headers=h).json()["islands"] == 1
+ 
+ 
+ def test_profile_requires_child_auth(client):
+     assert client.get("/me/profile").status_code == 401
+diff --git a/backend/tests/test_story.py b/backend/tests/test_story.py
+new file mode 100644
+index 0000000..b127b42
+--- /dev/null
++++ b/backend/tests/test_story.py
+@@ -0,0 +1,34 @@
++from datetime import date
++
++from app.models.child import Child
++from app.models.family import Family
++from app.models.knowledge import KnowledgeNode
++from app.services import story_service
++
++
++def _child(db_session):
++    fam = Family(name="F")
++    db_session.add(fam)
++    db_session.flush()
++    child = Child(family_id=fam.id, name="Leo", birthdate=date(2018, 1, 1), pin_hash="x")
++    db_session.add(child)
++    db_session.commit()
++    return child
++
++
++def test_create_story_is_pending_and_weaves_concepts(db_session):
++    child = _child(db_session)
++    db_session.add(KnowledgeNode(child_id=child.id, concept="flotabilidad", subject="ciencia"))
++    db_session.commit()
++    story = story_service.create_story(db_session, child)
++    assert story.id is not None
++    assert story.status == "pending"
++    assert "flotabilidad" in story.title or "flotabilidad" in story.body
++    assert "Leo" in story.body
++
++
++def test_create_story_without_concepts(db_session):
++    child = _child(db_session)
++    story = story_service.create_story(db_session, child)
++    assert story.status == "pending"
++    assert "Leo" in story.body
+diff --git a/backend/tests/test_story_api.py b/backend/tests/test_story_api.py
+new file mode 100644
+index 0000000..e76f0f0
+--- /dev/null
++++ b/backend/tests/test_story_api.py
+@@ -0,0 +1,91 @@
++from datetime import date
++
++from app.models.child import Child
++from app.models.family import Family, User
++from app.security import create_token
++
++
++def _setup(db_session):
++    fam = Family(name="F")
++    db_session.add(fam)
++    db_session.flush()
++    user = User(family_id=fam.id, email="p@e.com", password_hash="x")
++    child = Child(family_id=fam.id, name="Leo", birthdate=date(2018, 1, 1), pin_hash="x")
++    db_session.add_all([user, child])
++    db_session.commit()
++    child_h = {"Authorization": f"Bearer {create_token(subject=str(child.id), token_type='child')}"}
++    fam_h = {"Authorization": f"Bearer {create_token(subject=str(user.id), token_type='family')}"}
++    return child, child_h, fam_h
++
++
++def test_child_creates_pending_story(client, db_session):
++    _child, child_h, _fam_h = _setup(db_session)
++    r = client.post("/me/stories", headers=child_h)
++    assert r.status_code == 201
++    body = r.json()
++    assert body["status"] == "pending"
++    assert "Leo" in body["body"]
++
++
++def test_child_only_sees_approved(client, db_session):
++    _child, child_h, fam_h = _setup(db_session)
++    sid = client.post("/me/stories", headers=child_h).json()["id"]
++    # Pendiente: no aparece en su lista ni en el detalle
++    assert client.get("/me/stories", headers=child_h).json() == []
++    assert client.get(f"/me/stories/{sid}", headers=child_h).status_code == 404
++    # La familia lo aprueba
++    client.put(f"/family/stories/{sid}", headers=fam_h, json={"action": "approve"})
++    lst = client.get("/me/stories", headers=child_h).json()
++    assert len(lst) == 1 and lst[0]["id"] == sid
++    assert client.get(f"/me/stories/{sid}", headers=child_h).status_code == 200
++
++
++def test_family_lists_and_reviews(client, db_session):
++    _child, child_h, fam_h = _setup(db_session)
++    sid = client.post("/me/stories", headers=child_h).json()["id"]
++    # La familia ve el pendiente
++    pend = client.get("/family/stories", headers=fam_h, params={"status_filter": "pending"}).json()
++    assert len(pend) == 1 and pend[0]["id"] == sid
++    # Edita y aprueba en un solo paso
++    r = client.put(
++        f"/family/stories/{sid}",
++        headers=fam_h,
++        json={"action": "approve", "title": "Nuevo título"},
++    )
++    assert r.status_code == 200
++    assert r.json()["title"] == "Nuevo título"
++    assert r.json()["status"] == "approved"
++
++
++def test_family_rejects_story(client, db_session):
++    _child, child_h, fam_h = _setup(db_session)
++    sid = client.post("/me/stories", headers=child_h).json()["id"]
++    client.put(f"/family/stories/{sid}", headers=fam_h, json={"action": "reject"})
++    # Rechazado: no aparece para el niño
++    assert client.get("/me/stories", headers=child_h).json() == []
++    rej = client.get("/family/stories", headers=fam_h, params={"status_filter": "rejected"}).json()
++    assert len(rej) == 1
++
++
++def test_auth_guards(client, db_session):
++    _child, child_h, fam_h = _setup(db_session)
++    # Niño no puede usar endpoints de familia y viceversa (tipo de token inválido → 401)
++    assert client.get("/family/stories", headers=child_h).status_code == 401
++    assert client.post("/me/stories", headers=fam_h).status_code == 401
++    # Sin token → 401
++    assert client.get("/me/stories").status_code == 401
++    assert client.get("/family/stories").status_code == 401
++
++
++def test_family_cannot_review_other_familys_story(client, db_session):
++    _child, child_h, _fam_h = _setup(db_session)
++    sid = client.post("/me/stories", headers=child_h).json()["id"]
++    # Otra familia
++    other = Family(name="Otra")
++    db_session.add(other)
++    db_session.flush()
++    other_user = User(family_id=other.id, email="o@e.com", password_hash="x")
++    db_session.add(other_user)
++    db_session.commit()
++    other_h = {"Authorization": f"Bearer {create_token(subject=str(other_user.id), token_type='family')}"}
++    assert client.put(f"/family/stories/{sid}", headers=other_h, json={"action": "approve"}).status_code == 404
+diff --git a/frontend/src/App.test.tsx b/frontend/src/App.test.tsx
+index a95e5ae..92240ce 100644
+--- a/frontend/src/App.test.tsx
++++ b/frontend/src/App.test.tsx
+@@ -1,19 +1,34 @@
+ import { render, screen } from "@testing-library/react";
+ import { MemoryRouter } from "react-router-dom";
+ import { SessionProvider } from "./auth/SessionContext";
+ import { I18nProvider } from "./i18n/I18nContext";
+ import App from "./App";
+ 
+-test("shows create-family screen at root", () => {
++test("shows welcome screen at root", () => {
+   localStorage.clear();
+   render(
+     <I18nProvider initialLang="es">
+       <SessionProvider>
+         <MemoryRouter initialEntries={["/"]}>
+           <App />
+         </MemoryRouter>
+       </SessionProvider>
+     </I18nProvider>,
+   );
++  expect(screen.getByRole("link", { name: /crear el espacio de mi familia/i })).toBeInTheDocument();
++  expect(screen.getByRole("link", { name: /ya tengo cuenta/i })).toBeInTheDocument();
++});
++
++test("shows registration form at /crear", () => {
++  localStorage.clear();
++  render(
++    <I18nProvider initialLang="es">
++      <SessionProvider>
++        <MemoryRouter initialEntries={["/crear"]}>
++          <App />
++        </MemoryRouter>
++      </SessionProvider>
++    </I18nProvider>,
++  );
+   expect(screen.getByText(/crea el espacio de tu familia/i)).toBeInTheDocument();
+ });
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index 0617dc9..786eb17 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -1,31 +1,39 @@
+ import { Navigate, Route, Routes } from "react-router-dom";
+ import ProtectedRoute from "./routes/ProtectedRoute";
++import Welcome from "./screens/Welcome";
+ import CreateFamily from "./screens/CreateFamily";
+ import Login from "./screens/Login";
+ import AddExplorer from "./screens/AddExplorer";
+ import WhoExplores from "./screens/WhoExplores";
+ import ChildAccess from "./screens/ChildAccess";
+ import Spark from "./screens/Spark";
+ import LessonScreen from "./screens/LessonScreen";
+ import MyKnowledge from "./screens/MyKnowledge";
+ import AIConfigPanel from "./screens/AIConfigPanel";
++import StoryLibrary from "./screens/StoryLibrary";
++import StoryReader from "./screens/StoryReader";
++import FamilyStories from "./screens/FamilyStories";
+ 
+ export default function App() {
+   return (
+     <Routes>
+-      <Route path="/" element={<CreateFamily />} />
++      <Route path="/" element={<Welcome />} />
++      <Route path="/crear" element={<CreateFamily />} />
+       <Route path="/login" element={<Login />} />
+       <Route element={<ProtectedRoute />}>
+         <Route path="/familia" element={<Navigate to="/familia/explorar" replace />} />
+         <Route path="/familia/explorar" element={<WhoExplores />} />
+         <Route path="/familia/nuevo" element={<AddExplorer />} />
+         <Route path="/explorar/:childId" element={<ChildAccess />} />
+         <Route path="/jugar" element={<Spark />} />
+         <Route path="/jugar/leccion/:id" element={<LessonScreen />} />
+         <Route path="/jugar/mis-islas" element={<MyKnowledge />} />
++        <Route path="/jugar/cuentos" element={<StoryLibrary />} />
++        <Route path="/jugar/cuentos/:id" element={<StoryReader />} />
+         <Route path="/familia/ia" element={<AIConfigPanel />} />
++        <Route path="/familia/cuentos" element={<FamilyStories />} />
+       </Route>
+       <Route path="*" element={<Navigate to="/" replace />} />
+     </Routes>
+   );
+ }
+diff --git a/frontend/src/api/children.ts b/frontend/src/api/children.ts
+index 5e6e19f..1a05ca8 100644
+--- a/frontend/src/api/children.ts
++++ b/frontend/src/api/children.ts
+@@ -1,24 +1,24 @@
+ import { apiFetch } from "./client";
+ import type { TokenResponse } from "./auth";
+ 
+-export type Child = { id: number; name: string; birthdate: string; age: number };
++export type Child = { id: number; name: string; birthdate: string; age: number; avatar: string };
+ 
+ export function listChildren() {
+   return apiFetch<Child[]>("/children", { auth: true });
+ }
+ 
+-export function createChild(name: string, birthdate: string, pin: string) {
++export function createChild(name: string, birthdate: string, pin: string, avatar: string) {
+   return apiFetch<Child>("/children", {
+     method: "POST",
+     auth: true,
+-    body: { name, birthdate, pin },
++    body: { name, birthdate, pin, avatar },
+   });
+ }
+ 
+ export function childLogin(childId: number, pin: string) {
+   return apiFetch<TokenResponse>(`/children/${childId}/login`, {
+     method: "POST",
+     auth: true,
+     body: { pin },
+   });
+ }
+diff --git a/frontend/src/api/nucleo.ts b/frontend/src/api/nucleo.ts
+index 9676fec..09fad1b 100644
+--- a/frontend/src/api/nucleo.ts
++++ b/frontend/src/api/nucleo.ts
+@@ -1,28 +1,29 @@
+ import { apiFetch } from "./client";
+ 
+-export type ChildProfile = { name: string; age: number; islands: number };
++export type ChildProfile = { name: string; age: number; islands: number; avatar: string };
+ 
+ export function getProfile() {
+   return apiFetch<ChildProfile>("/me/profile", { auth: "child" });
+ }
+ 
+ export type Lesson = {
+   id: number;
+   curiosity: string;
+   subject: string;
+   concept: string;
+   title: string;
+   body: string;
+   fun_fact: string;
+   answered: boolean;
+   quiz: { question: string; options: string[] };
++  follow_ups: string[];
+ };
+ 
+ export type Suggestion = { curiosity: string; emoji: string };
+ export type AnswerResult = { correct: boolean; explanation: string; concept: string };
+ export type KnowledgeNode = { id: number; concept: string; subject: string; mastery: number };
+ 
+ export function createLesson(curiosity: string, subject?: string) {
+   return apiFetch<Lesson>("/lessons", { method: "POST", auth: "child", body: { curiosity, subject } });
+ }
+ 
+diff --git a/frontend/src/api/stories.ts b/frontend/src/api/stories.ts
+new file mode 100644
+index 0000000..62741d8
+--- /dev/null
++++ b/frontend/src/api/stories.ts
+@@ -0,0 +1,34 @@
++import { apiFetch } from "./client";
++
++export type Story = { id: number; title: string; body: string; status: string };
++
++// --- Niño (auth: "child") ---
++export function createStory() {
++  return apiFetch<Story>("/me/stories", { method: "POST", auth: "child" });
++}
++
++export function getMyStories() {
++  return apiFetch<Story[]>("/me/stories", { auth: "child" });
++}
++
++export function getMyStory(id: number) {
++  return apiFetch<Story>(`/me/stories/${id}`, { auth: "child" });
++}
++
++// --- Familia (auth: true) ---
++export function getFamilyStories(statusFilter?: string) {
++  const q = statusFilter ? `?status_filter=${statusFilter}` : "";
++  return apiFetch<Story[]>(`/family/stories${q}`, { auth: true });
++}
++
++export function reviewStory(
++  id: number,
++  action: "approve" | "reject",
++  title?: string,
++  body?: string,
++) {
++  const payload: Record<string, unknown> = { action };
++  if (title !== undefined) payload.title = title;
++  if (body !== undefined) payload.body = body;
++  return apiFetch<Story>(`/family/stories/${id}`, { method: "PUT", auth: true, body: payload });
++}
+diff --git a/frontend/src/components/ChildHeader.test.tsx b/frontend/src/components/ChildHeader.test.tsx
+index 6b8c494..955883d 100644
+--- a/frontend/src/components/ChildHeader.test.tsx
++++ b/frontend/src/components/ChildHeader.test.tsx
+@@ -7,21 +7,21 @@ import ChildHeader from "./ChildHeader";
+ 
+ beforeEach(() => {
+   localStorage.clear();
+   setChildToken("child-tok");
+ });
+ afterEach(() => vi.restoreAllMocks());
+ 
+ test("shows child name and islands", async () => {
+   vi.stubGlobal(
+     "fetch",
+-    vi.fn(async () => new Response(JSON.stringify({ name: "Nora", age: 7, islands: 3 }), { status: 200 })),
++    vi.fn(async () => new Response(JSON.stringify({ name: "Nora", age: 7, islands: 3, avatar: "cat" }), { status: 200 })),
+   );
+   render(
+     <I18nProvider initialLang="es">
+       <MemoryRouter>
+         <ChildHeader />
+       </MemoryRouter>
+     </I18nProvider>,
+   );
+   expect(await screen.findByText(/Nora/)).toBeInTheDocument();
+   expect(screen.getByText(/🏝️ 3/)).toBeInTheDocument();
+diff --git a/frontend/src/components/ChildHeader.tsx b/frontend/src/components/ChildHeader.tsx
+index 9928321..68734f7 100644
+--- a/frontend/src/components/ChildHeader.tsx
++++ b/frontend/src/components/ChildHeader.tsx
+@@ -1,33 +1,37 @@
+ import { useEffect, useState } from "react";
+ import { Link } from "react-router-dom";
+ import { getProfile, type ChildProfile } from "../api/nucleo";
+ import { useI18n } from "../i18n/I18nContext";
++import { Avatar } from "./avatars";
+ 
+ export default function ChildHeader() {
+   const [p, setP] = useState<ChildProfile | null>(null);
+   const { t } = useI18n();
+ 
+   useEffect(() => {
+     getProfile()
+       .then(setP)
+       .catch(() => undefined);
+   }, []);
+ 
+   return (
+     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 6 }}>
+       <Link to="/jugar" aria-label={t("child.home")} style={{ fontSize: 22, textDecoration: "none" }}>
+         🏠
+       </Link>
+       {p?.name && (
+-        <div style={{ fontFamily: "var(--font-head)", fontWeight: 600, color: "var(--teal-dark)" }}>
+-          {t("child.hi")} {p.name}
++        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
++          <Avatar id={p.avatar} size={30} />
++          <div style={{ fontFamily: "var(--font-head)", fontWeight: 600, color: "var(--teal-dark)" }}>
++            {t("child.hi")} {p.name}
++          </div>
+         </div>
+       )}
+       <Link
+         to="/jugar/mis-islas"
+         style={{ background: "#fff", borderRadius: 999, padding: "4px 12px", fontWeight: 800, color: "var(--coral)", textDecoration: "none", fontSize: 14 }}
+       >
+         🏝️ {p?.islands ?? 0}
+       </Link>
+     </div>
+   );
+diff --git a/frontend/src/components/avatars.tsx b/frontend/src/components/avatars.tsx
+new file mode 100644
+index 0000000..b0ec3af
+--- /dev/null
++++ b/frontend/src/components/avatars.tsx
+@@ -0,0 +1,236 @@
++import type { ReactNode } from "react";
++
++/**
++ * Set de avatares diseñado para Chispa. Estilo plano y amable, dentro de la
++ * identidad (coral/teal/ámbar), sobre una baldosa redondeada con un tinte suave.
++ * Cada avatar es SVG (nítido a cualquier tamaño) y autocontenido.
++ *
++ * Temas que gustan a los niños: animales, espacio y deportes.
++ */
++
++export type AvatarId =
++  | "fox"
++  | "cat"
++  | "panda"
++  | "owl"
++  | "frog"
++  | "lion"
++  | "rocket"
++  | "ball"
++  | "dino";
++
++type AvatarDef = { id: AvatarId; label: string; bg: string; art: ReactNode };
++
++const DARK = "#08433e";
++
++const DEFS: Record<AvatarId, AvatarDef> = {
++  fox: {
++    id: "fox",
++    label: "Zorro",
++    bg: "#ffe8de",
++    art: (
++      <g>
++        <polygon points="18,16 27,27 13,30" fill="#ff7a59" />
++        <polygon points="46,16 37,27 51,30" fill="#ff7a59" />
++        <circle cx="32" cy="34" r="15" fill="#ff7a59" />
++        <polygon points="22,37 42,37 32,52" fill="#fff" />
++        <circle cx="26" cy="32" r="2.4" fill={DARK} />
++        <circle cx="38" cy="32" r="2.4" fill={DARK} />
++        <circle cx="32" cy="42" r="2.6" fill={DARK} />
++      </g>
++    ),
++  },
++  cat: {
++    id: "cat",
++    label: "Gato",
++    bg: "#e6f2f0",
++    art: (
++      <g>
++        <polygon points="18,16 25,29 12,28" fill="#0e837b" />
++        <polygon points="46,16 39,29 52,28" fill="#0e837b" />
++        <circle cx="32" cy="34" r="15" fill="#0e837b" />
++        <circle cx="26" cy="32" r="2.4" fill="#fff" />
++        <circle cx="38" cy="32" r="2.4" fill="#fff" />
++        <circle cx="32" cy="38" r="2.2" fill="#ff7a59" />
++        <g stroke="#fff" strokeWidth="1.4" strokeLinecap="round">
++          <line x1="31" y1="39" x2="21" y2="41" />
++          <line x1="33" y1="39" x2="43" y2="41" />
++        </g>
++      </g>
++    ),
++  },
++  panda: {
++    id: "panda",
++    label: "Panda",
++    bg: "#eef1f0",
++    art: (
++      <g>
++        <circle cx="21" cy="23" r="6" fill={DARK} />
++        <circle cx="43" cy="23" r="6" fill={DARK} />
++        <circle cx="32" cy="35" r="15" fill="#fff" />
++        <ellipse cx="25" cy="33" rx="4" ry="5.2" fill={DARK} />
++        <ellipse cx="39" cy="33" rx="4" ry="5.2" fill={DARK} />
++        <circle cx="25" cy="33" r="1.5" fill="#fff" />
++        <circle cx="39" cy="33" r="1.5" fill="#fff" />
++        <circle cx="32" cy="41" r="2" fill={DARK} />
++      </g>
++    ),
++  },
++  owl: {
++    id: "owl",
++    label: "Búho",
++    bg: "#f3ecdd",
++    art: (
++      <g>
++        <polygon points="20,18 27,11 29,21" fill="#0e5b56" />
++        <polygon points="44,18 37,11 35,21" fill="#0e5b56" />
++        <ellipse cx="32" cy="37" rx="15" ry="16" fill="#0e5b56" />
++        <circle cx="25" cy="33" r="6" fill="#fff" />
++        <circle cx="39" cy="33" r="6" fill="#fff" />
++        <circle cx="25" cy="33" r="2.4" fill={DARK} />
++        <circle cx="39" cy="33" r="2.4" fill={DARK} />
++        <polygon points="29,38 35,38 32,44" fill="#e0892f" />
++      </g>
++    ),
++  },
++  frog: {
++    id: "frog",
++    label: "Rana",
++    bg: "#e7f3e2",
++    art: (
++      <g>
++        <ellipse cx="32" cy="37" rx="16" ry="12" fill="#2aa06a" />
++        <circle cx="22" cy="23" r="7" fill="#2aa06a" />
++        <circle cx="42" cy="23" r="7" fill="#2aa06a" />
++        <circle cx="22" cy="22" r="3" fill="#fff" />
++        <circle cx="42" cy="22" r="3" fill="#fff" />
++        <circle cx="22" cy="23" r="1.4" fill={DARK} />
++        <circle cx="42" cy="23" r="1.4" fill={DARK} />
++        <path d="M24 40 q8 6 16 0" stroke={DARK} strokeWidth="1.8" fill="none" strokeLinecap="round" />
++      </g>
++    ),
++  },
++  lion: {
++    id: "lion",
++    label: "León",
++    bg: "#fbefd9",
++    art: (
++      <g>
++        <g fill="#e0892f">
++          <circle cx="32" cy="15" r="4" />
++          <circle cx="20" cy="22" r="4" />
++          <circle cx="44" cy="22" r="4" />
++          <circle cx="16" cy="34" r="4" />
++          <circle cx="48" cy="34" r="4" />
++          <circle cx="20" cy="46" r="4" />
++          <circle cx="44" cy="46" r="4" />
++          <circle cx="32" cy="50" r="4" />
++        </g>
++        <circle cx="32" cy="34" r="15" fill="#e0892f" />
++        <circle cx="32" cy="34" r="11" fill="#ffd28a" />
++        <circle cx="27" cy="32" r="2" fill={DARK} />
++        <circle cx="37" cy="32" r="2" fill={DARK} />
++        <polygon points="30,37 34,37 32,40" fill="#a86326" />
++        <path d="M32 40 v2.5" stroke="#a86326" strokeWidth="1.4" strokeLinecap="round" />
++      </g>
++    ),
++  },
++  rocket: {
++    id: "rocket",
++    label: "Cohete",
++    bg: "#e9eef6",
++    art: (
++      <g>
++        <path d="M23 40 l-7 8 8 -2 z" fill="#ff7a59" />
++        <path d="M41 40 l7 8 -8 -2 z" fill="#ff7a59" />
++        <path d="M32 9 c8 6 9 19 9 29 v3 H23 v-3 c0-10 1-23 9-29 z" fill="#fff" stroke="#0e837b" strokeWidth="2" />
++        <circle cx="32" cy="25" r="5" fill="#0e837b" />
++        <path d="M27 44 q5 9 10 0 z" fill="#e0892f" />
++      </g>
++    ),
++  },
++  ball: {
++    id: "ball",
++    label: "Balón",
++    bg: "#eaf0ef",
++    art: (
++      <g>
++        <circle cx="32" cy="33" r="16" fill="#fff" stroke={DARK} strokeWidth="1.5" />
++        <polygon points="32,24 40,30 37,39 27,39 24,30" fill={DARK} />
++        <g stroke={DARK} strokeWidth="1.5" strokeLinecap="round">
++          <line x1="32" y1="24" x2="32" y2="18" />
++          <line x1="40" y1="30" x2="46" y2="27" />
++          <line x1="37" y1="39" x2="40" y2="46" />
++          <line x1="27" y1="39" x2="24" y2="46" />
++          <line x1="24" y1="30" x2="18" y2="27" />
++        </g>
++      </g>
++    ),
++  },
++  dino: {
++    id: "dino",
++    label: "Dino",
++    bg: "#e7f3e2",
++    art: (
++      <g>
++        <g fill="#1f8a5a">
++          <polygon points="18,30 22,21 26,30" />
++          <polygon points="26,28 30,18 34,28" />
++          <polygon points="34,28 38,20 42,29" />
++        </g>
++        <ellipse cx="33" cy="37" rx="15" ry="12" fill="#2aa06a" />
++        <circle cx="40" cy="34" r="3.4" fill="#fff" />
++        <circle cx="41" cy="34" r="1.6" fill={DARK} />
++        <circle cx="46" cy="39" r="1" fill={DARK} />
++        <path d="M40 43 q4 3 7 0" stroke={DARK} strokeWidth="1.4" fill="none" strokeLinecap="round" />
++      </g>
++    ),
++  },
++};
++
++export const AVATAR_IDS: AvatarId[] = [
++  "fox",
++  "cat",
++  "panda",
++  "owl",
++  "frog",
++  "lion",
++  "rocket",
++  "ball",
++  "dino",
++];
++
++export const DEFAULT_AVATAR: AvatarId = "fox";
++
++export function isAvatarId(value: string): value is AvatarId {
++  return Object.prototype.hasOwnProperty.call(DEFS, value);
++}
++
++export function avatarLabel(id: string): string {
++  return isAvatarId(id) ? DEFS[id].label : DEFS[DEFAULT_AVATAR].label;
++}
++
++export function Avatar({
++  id,
++  size = 48,
++  title,
++}: {
++  id?: string | null;
++  size?: number;
++  title?: string;
++}) {
++  const def = id && isAvatarId(id) ? DEFS[id] : DEFS[DEFAULT_AVATAR];
++  return (
++    <svg
++      width={size}
++      height={size}
++      viewBox="0 0 64 64"
++      role="img"
++      aria-label={title ?? def.label}
++      style={{ display: "block", flexShrink: 0 }}
++    >
++      <rect x="2" y="2" width="60" height="60" rx="18" fill={def.bg} />
++      {def.art}
++    </svg>
++  );
++}
+diff --git a/frontend/src/i18n/translations.ts b/frontend/src/i18n/translations.ts
+index 7ba9312..a0a0e17 100644
+--- a/frontend/src/i18n/translations.ts
++++ b/frontend/src/i18n/translations.ts
+@@ -2,20 +2,24 @@ export type Lang = "es" | "en";
+ 
+ export const LANGS: { code: Lang; label: string }[] = [
+   { code: "es", label: "Español" },
+   { code: "en", label: "English" },
+ ];
+ 
+ type Dict = Record<string, string>;
+ 
+ export const translations: Record<Lang, Dict> = {
+   es: {
++    "welcome.eyebrow": "Aprender por curiosidad",
++    "welcome.tagline": "Cada pregunta de tus hijos enciende una isla por descubrir.",
++    "welcome.create": "Crear el espacio de mi familia",
++    "welcome.login": "Ya tengo cuenta · Entrar",
+     "createFamily.title": "⚓ Crea el espacio de tu familia",
+     "createFamily.subtitle": "Tú administras. Tus hijos exploran, seguros.",
+     "createFamily.safety": "Sin datos del menor. Solo tú administras la tripulación.",
+     "field.name": "Tu nombre",
+     "field.email": "Email",
+     "field.password": "Contraseña",
+     "field.passwordConfirm": "Repite la contraseña",
+     "createFamily.error": "No se pudo crear la cuenta",
+     "createFamily.submit": "Crear cuenta",
+     "createFamily.haveAccount": "¿Ya navegas con nosotros?",
+@@ -23,20 +27,21 @@ export const translations: Record<Lang, Dict> = {
+     "login.title": "⚓ Entrar",
+     "login.error": "Email o contraseña incorrectos",
+     "login.errorGeneric": "Error al entrar",
+     "login.new": "¿Nuevo?",
+     "addExplorer.title": "Nuevo explorador",
+     "addExplorer.subtitle": "Un alias, su fecha de nacimiento y una clave de 4 dígitos.",
+     "field.alias": "Alias",
+     "field.birthdate": "Fecha de nacimiento",
+     "field.pin": "Clave de 4 dígitos (PIN)",
+     "field.pinConfirm": "Repite la clave",
++    "addExplorer.avatar": "Elige un avatar",
+     "addExplorer.error": "No se pudo guardar",
+     "addExplorer.submit": "Guardar explorador",
+     "common.yearsOld": "años",
+     "who.title": "¿Quién va a explorar?",
+     "who.subtitle": "Elige tu perfil para zarpar.",
+     "who.empty": "Aún no hay exploradores. ¡Añade el primero!",
+     "who.error": "No se pudo cargar la tripulación",
+     "who.addExplorer": "＋ Añadir explorador",
+     "who.demoHint": "💡 Por defecto funciona en modo demo. Configura la IA para lecciones reales.",
+     "addExplorer.pinHint": "Tu hijo usará este PIN para entrar en su espacio.",
+@@ -46,20 +51,22 @@ export const translations: Record<Lang, Dict> = {
+     "childAccess.success": "¡Listo! A explorar 🎉",
+     "validation.passwordShort": "La contraseña debe tener al menos 8 caracteres",
+     "validation.passwordMismatch": "Las contraseñas no coinciden",
+     "validation.pinLength": "El PIN debe tener 4 dígitos",
+     "validation.pinMismatch": "Las claves no coinciden",
+     "spark.title": "¿Qué quieres descubrir hoy?",
+     "spark.placeholder": "Escribe tu pregunta…",
+     "spark.discover": "¡Descubrir!",
+     "spark.suggestions": "Islas para empezar…",
+     "spark.blocked": "Esta la vemos con un adulto.",
++    "lesson.more": "¿Quieres saber más?",
++    "lesson.askPlaceholder": "Pregunta lo que quieras…",
+     "lesson.play": "¡A jugar! →",
+     "lesson.funFact": "Dato sorprendente",
+     "lesson.correct": "¡Muy bien!",
+     "lesson.wrong": "¡Casi! Inténtalo otra vez",
+     "lesson.toIslands": "Ver mis islas 🗺️",
+     "islands.title": "Tu archipiélago 🗺️",
+     "islands.empty": "Aún no hay islas. ¡Enciende una chispa!",
+     "islands.more": "Descubrir más",
+     "aiPanel.title": "Configuración de IA",
+     "aiPanel.subtitle": "Elige cómo se generan las lecciones.",
+@@ -83,22 +90,47 @@ export const translations: Record<Lang, Dict> = {
+     "aiPanel.tierByok": "🔑 Tu clave: usa tu cuenta de Claude/OpenAI/… Pagas a tu proveedor.",
+     "aiPanel.tierManaged": "💼 Comercial: nos encargamos nosotros (próximamente).",
+     "aiPanel.keyNote": "🔒 Tu clave se guarda cifrada y nunca se muestra.",
+     "aiPanel.useThis": "Usar este modelo",
+     "aiPanel.localHelp": "Necesitas Ollama corriendo y el modelo descargado.",
+     "aiPanel.byokHelp": "Pega tu clave API; se guarda cifrada.",
+     "aiPanel.freeHelp": "Modo demo: lecciones de ejemplo, sin IA real.",
+     "child.hi": "¡Hola,",
+     "child.home": "Inicio",
+     "child.islands": "islas",
++    "stories.title": "📚 Mis cuentos",
++    "stories.create": "✨ Crear un cuento",
++    "stories.creating": "Creando tu cuento...",
++    "stories.pending": "¡Listo! Tus padres lo revisarán pronto. 💛",
++    "stories.empty": "Aún no tienes cuentos aprobados. ¡Crea el primero!",
++    "stories.read": "Leer",
++    "stories.back": "← Volver a mis cuentos",
++    "stories.notFound": "Cuento no encontrado",
++    "spark.myStories": "📚 Mis cuentos",
++    "familyStories.title": "📚 Cuentos para revisar",
++    "familyStories.subtitle": "Aprueba, edita o rechaza los cuentos antes de que tus hijos los lean.",
++    "familyStories.empty": "No hay cuentos todavía.",
++    "familyStories.pending": "Pendiente",
++    "familyStories.approved": "Aprobado",
++    "familyStories.rejected": "Rechazado",
++    "familyStories.approve": "✅ Aprobar",
++    "familyStories.reject": "🚫 Rechazar",
++    "familyStories.titleLabel": "Título",
++    "familyStories.bodyLabel": "Cuento",
++    "familyStories.error": "No se pudieron cargar los cuentos",
++    "familyStories.link": "📚 Revisar cuentos",
+   },
+   en: {
++    "welcome.eyebrow": "Learning through curiosity",
++    "welcome.tagline": "Every question your kids ask lights up an island to explore.",
++    "welcome.create": "Create my family space",
++    "welcome.login": "I already have an account · Sign in",
+     "createFamily.title": "⚓ Create your family space",
+     "createFamily.subtitle": "You manage it. Your kids explore, safely.",
+     "createFamily.safety": "No child data. Only you manage the crew.",
+     "field.name": "Your name",
+     "field.email": "Email",
+     "field.password": "Password",
+     "field.passwordConfirm": "Repeat password",
+     "createFamily.error": "Could not create the account",
+     "createFamily.submit": "Create account",
+     "createFamily.haveAccount": "Already sailing with us?",
+@@ -106,20 +138,21 @@ export const translations: Record<Lang, Dict> = {
+     "login.title": "⚓ Log in",
+     "login.error": "Wrong email or password",
+     "login.errorGeneric": "Login error",
+     "login.new": "New here?",
+     "addExplorer.title": "New explorer",
+     "addExplorer.subtitle": "An alias, their date of birth and a 4-digit key.",
+     "field.alias": "Alias",
+     "field.birthdate": "Date of birth",
+     "field.pin": "4-digit key (PIN)",
+     "field.pinConfirm": "Repeat the key",
++    "addExplorer.avatar": "Choose an avatar",
+     "addExplorer.error": "Could not save",
+     "addExplorer.submit": "Save explorer",
+     "common.yearsOld": "years old",
+     "who.title": "Who's going to explore?",
+     "who.subtitle": "Pick your profile to set sail.",
+     "who.empty": "No explorers yet. Add the first one!",
+     "who.error": "Could not load the crew",
+     "who.addExplorer": "＋ Add explorer",
+     "who.demoHint": "💡 It runs in demo mode by default. Set up AI for real lessons.",
+     "addExplorer.pinHint": "Your child will use this PIN to enter their space.",
+@@ -129,20 +162,22 @@ export const translations: Record<Lang, Dict> = {
+     "childAccess.success": "Done! Let's explore 🎉",
+     "validation.passwordShort": "Password must be at least 8 characters",
+     "validation.passwordMismatch": "Passwords do not match",
+     "validation.pinLength": "The PIN must be 4 digits",
+     "validation.pinMismatch": "The keys do not match",
+     "spark.title": "What do you want to discover today?",
+     "spark.placeholder": "Type your question…",
+     "spark.discover": "Discover!",
+     "spark.suggestions": "Islands to start…",
+     "spark.blocked": "Let's see this one with a grown-up.",
++    "lesson.more": "Want to know more?",
++    "lesson.askPlaceholder": "Ask anything you want…",
+     "lesson.play": "Let's play! →",
+     "lesson.funFact": "Surprising fact",
+     "lesson.correct": "Great job!",
+     "lesson.wrong": "Almost! Try again",
+     "lesson.toIslands": "See my islands 🗺️",
+     "islands.title": "Your archipelago 🗺️",
+     "islands.empty": "No islands yet. Light a spark!",
+     "islands.more": "Discover more",
+     "aiPanel.title": "AI settings",
+     "aiPanel.subtitle": "Choose how lessons are generated.",
+@@ -166,12 +201,33 @@ export const translations: Record<Lang, Dict> = {
+     "aiPanel.tierByok": "🔑 Your key: use your Claude/OpenAI/… account. You pay your provider.",
+     "aiPanel.tierManaged": "💼 Commercial: we handle it (coming soon).",
+     "aiPanel.keyNote": "🔒 Your key is stored encrypted and never shown.",
+     "aiPanel.useThis": "Use this model",
+     "aiPanel.localHelp": "You need Ollama running and the model pulled.",
+     "aiPanel.byokHelp": "Paste your API key; it is stored encrypted.",
+     "aiPanel.freeHelp": "Demo mode: example lessons, no real AI.",
+     "child.hi": "Hi,",
+     "child.home": "Home",
+     "child.islands": "islands",
++    "stories.title": "📚 My stories",
++    "stories.create": "✨ Create a story",
++    "stories.creating": "Creating your story...",
++    "stories.pending": "Done! Your parents will review it soon. 💛",
++    "stories.empty": "No approved stories yet. Create your first one!",
++    "stories.read": "Read",
++    "stories.back": "← Back to my stories",
++    "stories.notFound": "Story not found",
++    "spark.myStories": "📚 My stories",
++    "familyStories.title": "📚 Stories to review",
++    "familyStories.subtitle": "Approve, edit or reject stories before your children read them.",
++    "familyStories.empty": "No stories yet.",
++    "familyStories.pending": "Pending",
++    "familyStories.approved": "Approved",
++    "familyStories.rejected": "Rejected",
++    "familyStories.approve": "✅ Approve",
++    "familyStories.reject": "🚫 Reject",
++    "familyStories.titleLabel": "Title",
++    "familyStories.bodyLabel": "Story",
++    "familyStories.error": "Could not load stories",
++    "familyStories.link": "📚 Review stories",
+   },
+ };
+diff --git a/frontend/src/lib/avatar.ts b/frontend/src/lib/avatar.ts
+deleted file mode 100644
+index ccc371b..0000000
+--- a/frontend/src/lib/avatar.ts
++++ /dev/null
+@@ -1,5 +0,0 @@
+-const AVATARS = ["🦊", "🐢", "🦉", "🐬", "🦁", "🐼", "🦄", "🐙"];
+-
+-export function avatarFor(id: number): string {
+-  return AVATARS[((id % AVATARS.length) + AVATARS.length) % AVATARS.length];
+-}
+diff --git a/frontend/src/screens/AddExplorer.test.tsx b/frontend/src/screens/AddExplorer.test.tsx
+index bd51d96..091c31c 100644
+--- a/frontend/src/screens/AddExplorer.test.tsx
++++ b/frontend/src/screens/AddExplorer.test.tsx
+@@ -1,27 +1,52 @@
+-import { render, screen } from "@testing-library/react";
++import { render, screen, waitFor } from "@testing-library/react";
+ import userEvent from "@testing-library/user-event";
+ import { MemoryRouter } from "react-router-dom";
+-import { beforeEach, expect, test } from "vitest";
++import { afterEach, beforeEach, expect, test, vi } from "vitest";
+ import { I18nProvider } from "../i18n/I18nContext";
+ import AddExplorer from "./AddExplorer";
+ 
+ beforeEach(() => localStorage.clear());
++afterEach(() => vi.restoreAllMocks());
+ 
+ function setup() {
+   render(
+     <I18nProvider initialLang="es">
+       <MemoryRouter>
+         <AddExplorer />
+       </MemoryRouter>
+     </I18nProvider>,
+   );
+ }
+ 
+ test("shows error when the two PINs do not match", async () => {
+   setup();
+   await userEvent.type(screen.getByLabelText("Alias"), "Leo");
+   await userEvent.type(screen.getByLabelText(/Clave de 4 dígitos/i), "1234");
+   await userEvent.type(screen.getByLabelText("Repite la clave"), "5678");
+   await userEvent.click(screen.getByRole("button", { name: /guardar explorador/i }));
+   expect(await screen.findByText(/no coinciden/i)).toBeInTheDocument();
+ });
++
++test("sends chosen avatar in POST body", async () => {
++  const fetchMock = vi.fn(
++    async () =>
++      new Response(
++        JSON.stringify({ id: 1, name: "Leo", birthdate: "2020-01-01", age: 5, avatar: "rocket" }),
++        { status: 201 },
++      ),
++  );
++  vi.stubGlobal("fetch", fetchMock);
++  // need a token so auth header is set
++  localStorage.setItem("chispa_token", "parent-tok");
++  setup();
++  await userEvent.click(screen.getByRole("radio", { name: "Cohete" }));
++  await userEvent.type(screen.getByLabelText("Alias"), "Leo");
++  await userEvent.type(screen.getByLabelText(/Fecha de nacimiento/i), "2020-01-01");
++  await userEvent.type(screen.getByLabelText(/Clave de 4 dígitos/i), "1234");
++  await userEvent.type(screen.getByLabelText("Repite la clave"), "1234");
++  await userEvent.click(screen.getByRole("button", { name: /guardar explorador/i }));
++  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
++  const call = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
++  const body = JSON.parse(call[1].body as string);
++  expect(body.avatar).toBe("rocket");
++});
+diff --git a/frontend/src/screens/AddExplorer.tsx b/frontend/src/screens/AddExplorer.tsx
+index 321533a..77eb4f8 100644
+--- a/frontend/src/screens/AddExplorer.tsx
++++ b/frontend/src/screens/AddExplorer.tsx
+@@ -1,53 +1,55 @@
+ import { useState } from "react";
+ import { useNavigate } from "react-router-dom";
+ import { createChild } from "../api/children";
+ import { ApiError } from "../api/client";
+ import { useI18n } from "../i18n/I18nContext";
++import { Avatar, AVATAR_IDS, DEFAULT_AVATAR, avatarLabel, type AvatarId } from "../components/avatars";
+ import Button from "../components/Button";
+ import ScreenCard from "../components/ScreenCard";
+ 
+ function ageFrom(birthdate: string): number | null {
+   if (!birthdate) return null;
+   const b = new Date(birthdate);
+   const t = new Date();
+   let age = t.getFullYear() - b.getFullYear();
+   const m = t.getMonth() - b.getMonth();
+   if (m < 0 || (m === 0 && t.getDate() < b.getDate())) age--;
+   return age;
+ }
+ 
+ export default function AddExplorer() {
+   const [name, setName] = useState("");
+   const [birthdate, setBirthdate] = useState("");
+   const [pin, setPin] = useState("");
+   const [pinConfirm, setPinConfirm] = useState("");
++  const [avatar, setAvatar] = useState<AvatarId>(DEFAULT_AVATAR);
+   const [error, setError] = useState("");
+   const [busy, setBusy] = useState(false);
+   const navigate = useNavigate();
+   const { t } = useI18n();
+   const age = ageFrom(birthdate);
+ 
+   async function handleSubmit(e: React.FormEvent) {
+     e.preventDefault();
+     setError("");
+     if (!/^\d{4}$/.test(pin)) {
+       setError(t("validation.pinLength"));
+       return;
+     }
+     if (pin !== pinConfirm) {
+       setError(t("validation.pinMismatch"));
+       return;
+     }
+     setBusy(true);
+     try {
+-      await createChild(name, birthdate, pin);
++      await createChild(name, birthdate, pin, avatar);
+       navigate("/familia/explorar");
+     } catch (err) {
+       setError(err instanceof ApiError ? err.message : t("addExplorer.error"));
+     } finally {
+       setBusy(false);
+     }
+   }
+ 
+   const pinInputStyle = { letterSpacing: "0.5em", textAlign: "center" as const };
+ 
+@@ -76,20 +78,47 @@ export default function AddExplorer() {
+           />
+         </label>
+         {age !== null && (
+           <div
+             aria-label="edad calculada"
+             style={{ alignSelf: "flex-start", background: "#e6f7ee", color: "#2aa06a", fontWeight: 800, padding: "6px 12px", borderRadius: 12 }}
+           >
+             {age} {t("common.yearsOld")}
+           </div>
+         )}
++        <div>
++          <span style={{ display: "block", fontSize: 13, fontWeight: 800, letterSpacing: "0.02em", color: "var(--teal-dark)", marginBottom: 6 }}>
++            {t("addExplorer.avatar")}
++          </span>
++          <div role="radiogroup" aria-label={t("addExplorer.avatar")} style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 8 }}>
++            {AVATAR_IDS.map((id) => (
++              <button
++                type="button"
++                key={id}
++                role="radio"
++                aria-checked={avatar === id}
++                aria-label={avatarLabel(id)}
++                onClick={() => setAvatar(id)}
++                style={{
++                  padding: 3,
++                  minHeight: 0,
++                  borderRadius: 14,
++                  background: avatar === id ? "rgba(255,122,89,.16)" : "transparent",
++                  outline: avatar === id ? "2px solid var(--coral)" : "2px solid transparent",
++                  boxShadow: "none",
++                }}
++              >
++                <Avatar id={id} size={44} />
++              </button>
++            ))}
++          </div>
++        </div>
+         <label>
+           {t("field.pin")}
+           <input
+             inputMode="numeric"
+             pattern="[0-9]*"
+             maxLength={4}
+             value={pin}
+             onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
+             style={pinInputStyle}
+             required
+diff --git a/frontend/src/screens/ChildAccess.tsx b/frontend/src/screens/ChildAccess.tsx
+index cee492b..551ef2d 100644
+--- a/frontend/src/screens/ChildAccess.tsx
++++ b/frontend/src/screens/ChildAccess.tsx
+@@ -1,21 +1,23 @@
+ import { useEffect, useState } from "react";
+-import { useNavigate, useParams } from "react-router-dom";
++import { useNavigate, useParams, useLocation } from "react-router-dom";
+ import { childLogin } from "../api/children";
+ import { setChildToken } from "../api/client";
+ import { useI18n } from "../i18n/I18nContext";
+-import { avatarFor } from "../lib/avatar";
++import { Avatar } from "../components/avatars";
+ import ScreenCard from "../components/ScreenCard";
+ 
+ export default function ChildAccess() {
+   const { childId } = useParams();
+   const navigate = useNavigate();
++  const location = useLocation();
++  const avatar = (location.state as { avatar?: string } | null)?.avatar;
+   const [pin, setPin] = useState("");
+   const [error, setError] = useState("");
+   const { t } = useI18n();
+ 
+   useEffect(() => {
+     if (pin.length === 4 && childId) {
+       childLogin(Number(childId), pin)
+         .then((res) => {
+           setChildToken(res.access_token);
+           navigate("/jugar");
+@@ -25,21 +27,23 @@ export default function ChildAccess() {
+           setPin("");
+         });
+     }
+   }, [pin, childId, t, navigate]);
+ 
+   const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "⌫"];
+ 
+   return (
+     <ScreenCard>
+       <div style={{ textAlign: "center" }}>
+-        <div style={{ fontSize: 52 }}>{avatarFor(Number(childId))}</div>
++        <div style={{ display: "flex", justifyContent: "center" }}>
++          <Avatar id={avatar} size={72} />
++        </div>
+         <div style={{ color: "#0a5a53", fontWeight: 600, marginTop: 2 }}>{t("childAccess.title")}</div>
+       </div>
+       <div aria-label="pin" style={{ display: "flex", gap: 14, justifyContent: "center", marginTop: 6 }}>
+         {[0, 1, 2, 3].map((i) => (
+           <span
+             key={i}
+             style={{
+               width: 16,
+               height: 16,
+               borderRadius: 99,
+diff --git a/frontend/src/screens/CreateFamily.tsx b/frontend/src/screens/CreateFamily.tsx
+index 730e716..ec49712 100644
+--- a/frontend/src/screens/CreateFamily.tsx
++++ b/frontend/src/screens/CreateFamily.tsx
+@@ -1,31 +1,33 @@
+ import { useState } from "react";
+-import { Link, useNavigate } from "react-router-dom";
++import { Link, Navigate, useNavigate } from "react-router-dom";
+ import { registerFamily } from "../api/auth";
+ import { ApiError } from "../api/client";
+ import { useSession } from "../auth/SessionContext";
+ import { useI18n } from "../i18n/I18nContext";
+ import Button from "../components/Button";
+ import ScreenCard from "../components/ScreenCard";
+ import LanguageSwitcher from "../components/LanguageSwitcher";
+ 
+ export default function CreateFamily() {
+   const [name, setName] = useState("");
+   const [email, setEmail] = useState("");
+   const [password, setPassword] = useState("");
+   const [confirm, setConfirm] = useState("");
+   const [error, setError] = useState("");
+   const [busy, setBusy] = useState(false);
+-  const { login } = useSession();
++  const { isAuthenticated, login } = useSession();
+   const { t } = useI18n();
+   const navigate = useNavigate();
+ 
++  if (isAuthenticated) return <Navigate to="/familia" replace />;
++
+   async function handleSubmit(e: React.FormEvent) {
+     e.preventDefault();
+     setError("");
+     if (password.length < 8) {
+       setError(t("validation.passwordShort"));
+       return;
+     }
+     if (password !== confirm) {
+       setError(t("validation.passwordMismatch"));
+       return;
+diff --git a/frontend/src/screens/FamilyStories.test.tsx b/frontend/src/screens/FamilyStories.test.tsx
+new file mode 100644
+index 0000000..352b433
+--- /dev/null
++++ b/frontend/src/screens/FamilyStories.test.tsx
+@@ -0,0 +1,33 @@
++import { render, screen } from "@testing-library/react";
++import { MemoryRouter } from "react-router-dom";
++import { afterEach, beforeEach, expect, test, vi } from "vitest";
++import { I18nProvider } from "../i18n/I18nContext";
++import { setToken } from "../api/client";
++import FamilyStories from "./FamilyStories";
++
++beforeEach(() => {
++  localStorage.clear();
++  setToken("fam-tok");
++});
++afterEach(() => vi.restoreAllMocks());
++
++test("shows a pending story with approve control", async () => {
++  vi.stubGlobal(
++    "fetch",
++    vi.fn(async () =>
++      new Response(
++        JSON.stringify([{ id: 3, title: "Cuento de Leo", body: "Érase una vez...", status: "pending" }]),
++        { status: 200 },
++      ),
++    ),
++  );
++  render(
++    <I18nProvider initialLang="es">
++      <MemoryRouter>
++        <FamilyStories />
++      </MemoryRouter>
++    </I18nProvider>,
++  );
++  expect(await screen.findByDisplayValue("Cuento de Leo")).toBeInTheDocument();
++  expect(screen.getByText(/Aprobar/)).toBeInTheDocument();
++});
+diff --git a/frontend/src/screens/FamilyStories.tsx b/frontend/src/screens/FamilyStories.tsx
+new file mode 100644
+index 0000000..c4ee5b0
+--- /dev/null
++++ b/frontend/src/screens/FamilyStories.tsx
+@@ -0,0 +1,121 @@
++import { useEffect, useState } from "react";
++import { Link } from "react-router-dom";
++import { getFamilyStories, reviewStory, type Story } from "../api/stories";
++import { useI18n } from "../i18n/I18nContext";
++import Button from "../components/Button";
++import ScreenCard from "../components/ScreenCard";
++
++export default function FamilyStories() {
++  const [stories, setStories] = useState<Story[]>([]);
++  const [error, setError] = useState("");
++  const [loaded, setLoaded] = useState(false);
++  const { t } = useI18n();
++
++  function load() {
++    getFamilyStories()
++      .then(setStories)
++      .catch(() => setError(t("familyStories.error")))
++      .finally(() => setLoaded(true));
++  }
++
++  useEffect(load, []);
++
++  const statusLabel: Record<string, string> = {
++    pending: t("familyStories.pending"),
++    approved: t("familyStories.approved"),
++    rejected: t("familyStories.rejected"),
++  };
++
++  return (
++    <ScreenCard>
++      <div>
++        <h1>{t("familyStories.title")}</h1>
++        <p style={{ margin: "4px 0 0", color: "#0a5a53", fontWeight: 600, fontSize: 14 }}>
++          {t("familyStories.subtitle")}
++        </p>
++      </div>
++      {error && <p role="alert">{error}</p>}
++      {loaded && stories.length === 0 && !error && (
++        <p style={{ color: "#0a5a53", fontWeight: 600 }}>{t("familyStories.empty")}</p>
++      )}
++      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
++        {stories.map((s) => (
++          <StoryRow key={s.id} story={s} statusLabel={statusLabel} onReviewed={load} />
++        ))}
++      </div>
++      <Link to="/familia/explorar" style={{ textAlign: "center", marginTop: 8 }}>
++        ←
++      </Link>
++    </ScreenCard>
++  );
++}
++
++function StoryRow({
++  story,
++  statusLabel,
++  onReviewed,
++}: {
++  story: Story;
++  statusLabel: Record<string, string>;
++  onReviewed: () => void;
++}) {
++  const [title, setTitle] = useState(story.title);
++  const [body, setBody] = useState(story.body);
++  const [busy, setBusy] = useState(false);
++  const { t } = useI18n();
++  const pending = story.status === "pending";
++
++  async function review(action: "approve" | "reject") {
++    setBusy(true);
++    try {
++      // Al aprobar guardamos las posibles ediciones; al rechazar no tocamos el texto.
++      if (action === "approve") {
++        await reviewStory(story.id, action, title, body);
++      } else {
++        await reviewStory(story.id, action);
++      }
++      onReviewed();
++    } finally {
++      setBusy(false);
++    }
++  }
++
++  return (
++    <div style={{ background: "#fff", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
++      <span style={{ fontSize: 12, fontWeight: 800, color: "var(--coral)" }}>
++        {statusLabel[story.status] ?? story.status}
++      </span>
++      {pending ? (
++        <>
++          <label style={{ fontSize: 12, fontWeight: 700, color: "#0a5a53" }}>
++            {t("familyStories.titleLabel")}
++          </label>
++          <input value={title} onChange={(e) => setTitle(e.target.value)} aria-label={t("familyStories.titleLabel")} />
++          <label style={{ fontSize: 12, fontWeight: 700, color: "#0a5a53" }}>
++            {t("familyStories.bodyLabel")}
++          </label>
++          <textarea
++            value={body}
++            onChange={(e) => setBody(e.target.value)}
++            rows={5}
++            aria-label={t("familyStories.bodyLabel")}
++            style={{ fontFamily: "inherit", fontSize: 14, lineHeight: 1.5 }}
++          />
++          <div style={{ display: "flex", gap: 8 }}>
++            <Button onClick={() => void review("approve")} disabled={busy}>
++              {t("familyStories.approve")}
++            </Button>
++            <button onClick={() => void review("reject")} disabled={busy} style={{ padding: "10px 14px" }}>
++              {t("familyStories.reject")}
++            </button>
++          </div>
++        </>
++      ) : (
++        <>
++          <strong style={{ color: "var(--teal-dark)" }}>{story.title}</strong>
++          <p style={{ color: "#0a5a53", margin: 0, lineHeight: 1.5 }}>{story.body}</p>
++        </>
++      )}
++    </div>
++  );
++}
+diff --git a/frontend/src/screens/LessonScreen.test.tsx b/frontend/src/screens/LessonScreen.test.tsx
+index 1f06370..4ac36f9 100644
+--- a/frontend/src/screens/LessonScreen.test.tsx
++++ b/frontend/src/screens/LessonScreen.test.tsx
+@@ -29,21 +29,24 @@ test("shows lesson then quiz, and feedback on answer", async () => {
+     "fetch",
+     vi.fn(async (_url: string, init?: RequestInit) => {
+       if (init?.method === "POST") {
+         return new Response(JSON.stringify({ correct: true, explanation: "¡bien!", concept: "c" }), { status: 200 });
+       }
+       return new Response(
+         JSON.stringify({
+           id: 7, curiosity: "x", subject: "ciencia", concept: "c", title: "La lluvia",
+           body: "El agua sube y baja", fun_fact: "dato", answered: false,
+           quiz: { question: "¿Qué cae?", options: ["sol", "agua", "viento"] },
++          follow_ups: ["¿Por qué llueve?", "¿Me das un ejemplo?"],
+         }),
+         { status: 200 },
+       );
+     }),
+   );
+   renderAt(7);
+   expect(await screen.findByText("La lluvia")).toBeInTheDocument();
++  expect(await screen.findByText(/¿Quieres saber más\?/)).toBeInTheDocument();
++  expect(screen.getByText(/¿Por qué llueve\?/)).toBeInTheDocument();
+   await userEvent.click(screen.getByRole("button", { name: /jugar/i }));
+   await userEvent.click(screen.getByRole("button", { name: "agua" }));
+   expect((await screen.findAllByText(/bien/i)).length).toBeGreaterThan(0);
+ });
+diff --git a/frontend/src/screens/LessonScreen.tsx b/frontend/src/screens/LessonScreen.tsx
+index dbe88e7..c1dbea8 100644
+--- a/frontend/src/screens/LessonScreen.tsx
++++ b/frontend/src/screens/LessonScreen.tsx
+@@ -1,78 +1,142 @@
+ import { useEffect, useState } from "react";
+ import { useNavigate, useParams } from "react-router-dom";
+-import { answerLesson, getLesson, type AnswerResult, type Lesson } from "../api/nucleo";
++import { answerLesson, createLesson, getLesson, type AnswerResult, type Lesson } from "../api/nucleo";
+ import { useI18n } from "../i18n/I18nContext";
+ import Button from "../components/Button";
+ import ScreenCard from "../components/ScreenCard";
+ import ChildHeader from "../components/ChildHeader";
+ 
+ export default function LessonScreen() {
+   const { id } = useParams();
+   const [lesson, setLesson] = useState<Lesson | null>(null);
+   const [playing, setPlaying] = useState(false);
+   const [result, setResult] = useState<AnswerResult | null>(null);
++  const [busy, setBusy] = useState(false);
++  const [question, setQuestion] = useState("");
+   const { t } = useI18n();
+   const navigate = useNavigate();
+ 
+   useEffect(() => {
++    // Al cambiar de lección (incluido seguir una pregunta), reinicia el estado.
++    setLesson(null);
++    setPlaying(false);
++    setResult(null);
++    setQuestion("");
+     if (id) getLesson(Number(id)).then(setLesson).catch(() => undefined);
+   }, [id]);
+ 
+   if (!lesson) {
+     return (
+       <ScreenCard>
+         <p>…</p>
+       </ScreenCard>
+     );
+   }
+ 
+   async function choose(i: number) {
+     if (!lesson) return;
+     const r = await answerLesson(lesson.id, i);
+     setResult(r);
+   }
+ 
++  async function startFollowUp(question: string) {
++    setBusy(true);
++    try {
++      const next = await createLesson(question);
++      navigate(`/jugar/leccion/${next.id}`);
++    } catch {
++      // silencioso: el niño no ve errores técnicos
++    } finally {
++      setBusy(false);
++    }
++  }
++
++  function askOwn(e: React.FormEvent) {
++    e.preventDefault();
++    const q = question.trim();
++    if (q) void startFollowUp(q);
++  }
++
++  const followUps = lesson.follow_ups ?? [];
++  const moreSection = (
++    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
++      <div style={{ fontWeight: 800, color: "#0a5a53" }}>{t("lesson.more")}</div>
++      <form onSubmit={askOwn} style={{ display: "flex", gap: 8 }}>
++        <input
++          value={question}
++          onChange={(e) => setQuestion(e.target.value)}
++          placeholder={t("lesson.askPlaceholder")}
++          aria-label={t("lesson.askPlaceholder")}
++          disabled={busy}
++          style={{ flex: 1 }}
++        />
++        <button
++          type="submit"
++          className="btn-primary"
++          disabled={busy || !question.trim()}
++          style={{ width: "auto", padding: "0 16px", minHeight: 0 }}
++        >
++          🔎
++        </button>
++      </form>
++      {followUps.map((q) => (
++        <button
++          key={q}
++          onClick={() => void startFollowUp(q)}
++          disabled={busy}
++          style={{ textAlign: "left", padding: 12 }}
++        >
++          🔎 {q}
++        </button>
++      ))}
++    </div>
++  );
++
+   return (
+     <ScreenCard>
+       {!playing ? (
+         <>
+           <ChildHeader />
+           <div style={{ fontSize: 12, fontWeight: 800, textTransform: "uppercase", color: "#0a5a53" }}>
+             {lesson.subject}
+           </div>
+           <h1>{lesson.title}</h1>
+           <div style={{ background: "#fff", borderRadius: 16, padding: 16, lineHeight: 1.6, fontSize: 16, color: "var(--teal-dark)" }}>
+             {lesson.body}
+           </div>
+           <div style={{ background: "#fff", borderRadius: 16, padding: 14 }}>
+             <strong style={{ color: "var(--amber)" }}>💡 {t("lesson.funFact")}</strong>
+             <div>{lesson.fun_fact}</div>
+           </div>
+           <Button onClick={() => setPlaying(true)}>{t("lesson.play")}</Button>
++          {moreSection}
+         </>
+       ) : !result ? (
+         <>
+           <h1>{lesson.quiz.question}</h1>
+           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+             {lesson.quiz.options.map((opt, i) => (
+               <button key={opt} onClick={() => void choose(i)} style={{ padding: 16 }}>
+                 {opt}
+               </button>
+             ))}
+           </div>
+         </>
+       ) : (
+         <>
+           <div style={{ fontSize: 60, textAlign: "center" }}>{result.correct ? "🎉" : "💪"}</div>
+           <h1 style={{ textAlign: "center" }}>{result.correct ? t("lesson.correct") : t("lesson.wrong")}</h1>
+           <p style={{ textAlign: "center" }}>{result.explanation}</p>
+           {result.correct ? (
+-            <Button onClick={() => navigate("/jugar/mis-islas")}>{t("lesson.toIslands")}</Button>
++            <>
++              <Button onClick={() => navigate("/jugar/mis-islas")}>{t("lesson.toIslands")}</Button>
++              {moreSection}
++            </>
+           ) : (
+             <Button onClick={() => setResult(null)}>↺</Button>
+           )}
+         </>
+       )}
+     </ScreenCard>
+   );
+ }
+diff --git a/frontend/src/screens/Login.tsx b/frontend/src/screens/Login.tsx
+index 8b096d3..86ed394 100644
+--- a/frontend/src/screens/Login.tsx
++++ b/frontend/src/screens/Login.tsx
+@@ -1,29 +1,31 @@
+ import { useState } from "react";
+-import { Link, useNavigate } from "react-router-dom";
++import { Link, Navigate, useNavigate } from "react-router-dom";
+ import { loginFamily } from "../api/auth";
+ import { ApiError } from "../api/client";
+ import { useSession } from "../auth/SessionContext";
+ import { useI18n } from "../i18n/I18nContext";
+ import Button from "../components/Button";
+ import ScreenCard from "../components/ScreenCard";
+ import LanguageSwitcher from "../components/LanguageSwitcher";
+ 
+ export default function Login() {
+   const [email, setEmail] = useState("");
+   const [password, setPassword] = useState("");
+   const [error, setError] = useState("");
+   const [busy, setBusy] = useState(false);
+-  const { login } = useSession();
++  const { isAuthenticated, login } = useSession();
+   const { t } = useI18n();
+   const navigate = useNavigate();
+ 
++  if (isAuthenticated) return <Navigate to="/familia" replace />;
++
+   async function handleSubmit(e: React.FormEvent) {
+     e.preventDefault();
+     setError("");
+     setBusy(true);
+     try {
+       const { access_token } = await loginFamily(email, password);
+       login(access_token);
+       navigate("/familia");
+     } catch (err) {
+       setError(err instanceof ApiError ? t("login.error") : t("login.errorGeneric"));
+@@ -56,15 +58,15 @@ export default function Login() {
+         {error && (
+           <p role="alert" style={{ color: "#c0392b", margin: 0, fontWeight: 700, fontSize: 14 }}>
+             {error}
+           </p>
+         )}
+         <Button type="submit" disabled={busy}>
+           {t("action.enter")}
+         </Button>
+       </form>
+       <p style={{ textAlign: "center", fontSize: 13 }}>
+-        {t("login.new")} <Link to="/">{t("createFamily.submit")}</Link>
++        {t("login.new")} <Link to="/crear">{t("createFamily.submit")}</Link>
+       </p>
+     </ScreenCard>
+   );
+ }
+diff --git a/frontend/src/screens/Spark.tsx b/frontend/src/screens/Spark.tsx
+index 84ab2ee..937c621 100644
+--- a/frontend/src/screens/Spark.tsx
++++ b/frontend/src/screens/Spark.tsx
+@@ -1,12 +1,12 @@
+ import { useEffect, useState } from "react";
+-import { useNavigate } from "react-router-dom";
++import { Link, useNavigate } from "react-router-dom";
+ import { createLesson, getSuggestions, type Suggestion } from "../api/nucleo";
+ import { ApiError } from "../api/client";
+ import { useI18n } from "../i18n/I18nContext";
+ import Button from "../components/Button";
+ import ScreenCard from "../components/ScreenCard";
+ import ChildHeader from "../components/ChildHeader";
+ 
+ export default function Spark() {
+   const [curiosity, setCuriosity] = useState("");
+   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+@@ -58,13 +58,16 @@ export default function Spark() {
+         </Button>
+       </form>
+       <div style={{ fontWeight: 800, color: "#0a5a53", marginTop: 4 }}>{t("spark.suggestions")}</div>
+       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+         {suggestions.map((s) => (
+           <button key={s.curiosity} onClick={() => void start(s.curiosity)} style={{ textAlign: "left", padding: 13 }}>
+             {s.emoji} {s.curiosity}
+           </button>
+         ))}
+       </div>
++      <Link to="/jugar/cuentos" style={{ textAlign: "center", marginTop: 4 }}>
++        {t("spark.myStories")}
++      </Link>
+     </ScreenCard>
+   );
+ }
+diff --git a/frontend/src/screens/StoryLibrary.test.tsx b/frontend/src/screens/StoryLibrary.test.tsx
+new file mode 100644
+index 0000000..534e545
+--- /dev/null
++++ b/frontend/src/screens/StoryLibrary.test.tsx
+@@ -0,0 +1,32 @@
++import { render, screen } from "@testing-library/react";
++import { MemoryRouter } from "react-router-dom";
++import { afterEach, beforeEach, expect, test, vi } from "vitest";
++import { I18nProvider } from "../i18n/I18nContext";
++import { setChildToken } from "../api/client";
++import StoryLibrary from "./StoryLibrary";
++
++beforeEach(() => {
++  localStorage.clear();
++  setChildToken("child-tok");
++});
++afterEach(() => vi.restoreAllMocks());
++
++test("lists approved stories", async () => {
++  vi.stubGlobal(
++    "fetch",
++    vi.fn(async () =>
++      new Response(
++        JSON.stringify([{ id: 7, title: "La aventura de Leo", body: "...", status: "approved" }]),
++        { status: 200 },
++      ),
++    ),
++  );
++  render(
++    <I18nProvider initialLang="es">
++      <MemoryRouter>
++        <StoryLibrary />
++      </MemoryRouter>
++    </I18nProvider>,
++  );
++  expect(await screen.findByText("La aventura de Leo")).toBeInTheDocument();
++});
+diff --git a/frontend/src/screens/StoryLibrary.tsx b/frontend/src/screens/StoryLibrary.tsx
+new file mode 100644
+index 0000000..08405ea
+--- /dev/null
++++ b/frontend/src/screens/StoryLibrary.tsx
+@@ -0,0 +1,67 @@
++import { useEffect, useState } from "react";
++import { Link } from "react-router-dom";
++import { createStory, getMyStories, type Story } from "../api/stories";
++import { useI18n } from "../i18n/I18nContext";
++import Button from "../components/Button";
++import ScreenCard from "../components/ScreenCard";
++import ChildHeader from "../components/ChildHeader";
++
++export default function StoryLibrary() {
++  const [stories, setStories] = useState<Story[]>([]);
++  const [loaded, setLoaded] = useState(false);
++  const [busy, setBusy] = useState(false);
++  const [justCreated, setJustCreated] = useState(false);
++  const { t } = useI18n();
++
++  function load() {
++    getMyStories()
++      .then(setStories)
++      .catch(() => undefined)
++      .finally(() => setLoaded(true));
++  }
++
++  useEffect(load, []);
++
++  async function create() {
++    setBusy(true);
++    setJustCreated(false);
++    try {
++      await createStory();
++      setJustCreated(true);
++    } catch {
++      // silencioso: el niño no ve errores técnicos
++    } finally {
++      setBusy(false);
++    }
++  }
++
++  return (
++    <ScreenCard>
++      <ChildHeader />
++      <h1>{t("stories.title")}</h1>
++      <Button onClick={() => void create()} disabled={busy}>
++        {busy ? t("stories.creating") : t("stories.create")}
++      </Button>
++      {justCreated && (
++        <p role="status" style={{ background: "#fff", borderRadius: 16, padding: 12, color: "#0a5a53", fontWeight: 700 }}>
++          {t("stories.pending")}
++        </p>
++      )}
++      {loaded && stories.length === 0 && <p style={{ color: "#0a5a53" }}>{t("stories.empty")}</p>}
++      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
++        {stories.map((s) => (
++          <Link
++            key={s.id}
++            to={`/jugar/cuentos/${s.id}`}
++            style={{ background: "#fff", borderRadius: 16, padding: "14px 16px", textDecoration: "none", color: "var(--teal-dark)" }}
++          >
++            <span style={{ fontSize: 22 }}>📖</span> <strong>{s.title}</strong>
++          </Link>
++        ))}
++      </div>
++      <Link to="/jugar" style={{ textAlign: "center", marginTop: 8 }}>
++        {t("islands.more")}
++      </Link>
++    </ScreenCard>
++  );
++}
+diff --git a/frontend/src/screens/StoryReader.tsx b/frontend/src/screens/StoryReader.tsx
+new file mode 100644
+index 0000000..df987bf
+--- /dev/null
++++ b/frontend/src/screens/StoryReader.tsx
+@@ -0,0 +1,40 @@
++import { useEffect, useState } from "react";
++import { Link, useParams } from "react-router-dom";
++import { getMyStory, type Story } from "../api/stories";
++import { useI18n } from "../i18n/I18nContext";
++import ScreenCard from "../components/ScreenCard";
++import ChildHeader from "../components/ChildHeader";
++
++export default function StoryReader() {
++  const { id } = useParams();
++  const [story, setStory] = useState<Story | null>(null);
++  const [loaded, setLoaded] = useState(false);
++  const { t } = useI18n();
++
++  useEffect(() => {
++    if (!id) return;
++    getMyStory(Number(id))
++      .then(setStory)
++      .catch(() => undefined)
++      .finally(() => setLoaded(true));
++  }, [id]);
++
++  return (
++    <ScreenCard>
++      <ChildHeader />
++      {story ? (
++        <>
++          <h1>{story.title}</h1>
++          <div style={{ background: "#fff", borderRadius: 16, padding: 16, lineHeight: 1.7, fontSize: 16, color: "var(--teal-dark)" }}>
++            {story.body}
++          </div>
++        </>
++      ) : (
++        loaded && <p style={{ color: "#0a5a53" }}>{t("stories.notFound")}</p>
++      )}
++      <Link to="/jugar/cuentos" style={{ textAlign: "center", marginTop: 8 }}>
++        {t("stories.back")}
++      </Link>
++    </ScreenCard>
++  );
++}
+diff --git a/frontend/src/screens/Welcome.test.tsx b/frontend/src/screens/Welcome.test.tsx
+new file mode 100644
+index 0000000..a9d0e5f
+--- /dev/null
++++ b/frontend/src/screens/Welcome.test.tsx
+@@ -0,0 +1,36 @@
++import { render, screen } from "@testing-library/react";
++import { MemoryRouter, Route, Routes } from "react-router-dom";
++import { beforeEach, expect, test } from "vitest";
++import { I18nProvider } from "../i18n/I18nContext";
++import { SessionProvider } from "../auth/SessionContext";
++import { setToken } from "../api/client";
++import Welcome from "./Welcome";
++
++beforeEach(() => localStorage.clear());
++
++function renderAt(entry: string) {
++  return render(
++    <I18nProvider initialLang="es">
++      <SessionProvider>
++        <MemoryRouter initialEntries={[entry]}>
++          <Routes>
++            <Route path="/" element={<Welcome />} />
++            <Route path="/familia" element={<div>Zona de familia</div>} />
++          </Routes>
++        </MemoryRouter>
++      </SessionProvider>
++    </I18nProvider>,
++  );
++}
++
++test("offers create and sign-in paths when logged out", () => {
++  renderAt("/");
++  expect(screen.getByRole("link", { name: /crear el espacio de mi familia/i })).toBeInTheDocument();
++  expect(screen.getByRole("link", { name: /ya tengo cuenta/i })).toBeInTheDocument();
++});
++
++test("redirects an authenticated family to its space", () => {
++  setToken("fam-tok");
++  renderAt("/");
++  expect(screen.getByText("Zona de familia")).toBeInTheDocument();
++});
+diff --git a/frontend/src/screens/Welcome.tsx b/frontend/src/screens/Welcome.tsx
+new file mode 100644
+index 0000000..c59eb9a
+--- /dev/null
++++ b/frontend/src/screens/Welcome.tsx
+@@ -0,0 +1,68 @@
++import { Link, Navigate } from "react-router-dom";
++import { useSession } from "../auth/SessionContext";
++import { useI18n } from "../i18n/I18nContext";
++import ScreenCard from "../components/ScreenCard";
++import LanguageSwitcher from "../components/LanguageSwitcher";
++
++export default function Welcome() {
++  const { isAuthenticated } = useSession();
++  const { t } = useI18n();
++
++  // Si la familia ya tiene sesión, va directa a su espacio (no al registro).
++  if (isAuthenticated) return <Navigate to="/familia" replace />;
++
++  return (
++    <ScreenCard>
++      <LanguageSwitcher />
++
++      <div
++        style={{
++          flex: 1,
++          display: "flex",
++          flexDirection: "column",
++          justifyContent: "center",
++          alignItems: "center",
++          textAlign: "center",
++          gap: 4,
++        }}
++      >
++        <span style={{ fontSize: 12, fontWeight: 800, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(255,255,255,.85)" }}>
++          {t("welcome.eyebrow")}
++        </span>
++        <div style={{ fontSize: 64, lineHeight: 1 }} aria-hidden="true">✨</div>
++        <h1 className="brand-mark" style={{ fontSize: 46, margin: 0, color: "#fff" }}>
++          Chispa
++        </h1>
++        <p style={{ margin: "8px 4px 0", fontSize: 17, fontWeight: 700, color: "rgba(255,255,255,.92)", lineHeight: 1.35, maxWidth: 320 }}>
++          {t("welcome.tagline")}
++        </p>
++      </div>
++
++      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
++        <Link to="/crear" className="btn-primary">
++          {t("welcome.create")}
++        </Link>
++        <Link to="/login" className="btn-secondary">
++          {t("welcome.login")}
++        </Link>
++      </div>
++
++      <div
++        style={{
++          marginTop: 6,
++          display: "flex",
++          gap: 8,
++          alignItems: "center",
++          justifyContent: "center",
++          background: "rgba(255,255,255,.55)",
++          borderRadius: 12,
++          padding: "10px 12px",
++          fontSize: 12,
++          color: "#0a5a53",
++        }}
++      >
++        🔒 {t("createFamily.safety")}
++      </div>
++    </ScreenCard>
++  );
++}
+diff --git a/frontend/src/screens/WhoExplores.test.tsx b/frontend/src/screens/WhoExplores.test.tsx
+index 468bb40..65c7956 100644
+--- a/frontend/src/screens/WhoExplores.test.tsx
++++ b/frontend/src/screens/WhoExplores.test.tsx
+@@ -7,27 +7,28 @@ import WhoExplores from "./WhoExplores";
+ beforeEach(() => localStorage.clear());
+ afterEach(() => vi.restoreAllMocks());
+ 
+ test("lists the crew (children) from the API", async () => {
+   vi.stubGlobal(
+     "fetch",
+     vi.fn(
+       async () =>
+         new Response(
+           JSON.stringify([
+-            { id: 1, name: "Leo", birthdate: "2019-03-12", age: 7 },
+-            { id: 2, name: "Mía", birthdate: "2020-01-01", age: 6 },
++            { id: 1, name: "Leo", birthdate: "2019-03-12", age: 7, avatar: "fox" },
++            { id: 2, name: "Mía", birthdate: "2020-01-01", age: 6, avatar: "cat" },
+           ]),
+           { status: 200 },
+         ),
+     ),
+   );
+   render(
+     <I18nProvider initialLang="es">
+       <MemoryRouter>
+         <WhoExplores />
+       </MemoryRouter>
+     </I18nProvider>,
+   );
+   expect(await screen.findByText("Leo")).toBeInTheDocument();
+   expect(screen.getByText("Mía")).toBeInTheDocument();
++  expect(screen.getByLabelText("Zorro")).toBeInTheDocument();
+ });
+diff --git a/frontend/src/screens/WhoExplores.tsx b/frontend/src/screens/WhoExplores.tsx
+index 5846a9c..dd50c79 100644
+--- a/frontend/src/screens/WhoExplores.tsx
++++ b/frontend/src/screens/WhoExplores.tsx
+@@ -1,15 +1,15 @@
+ import { useEffect, useState } from "react";
+ import { Link, useNavigate } from "react-router-dom";
+ import { listChildren, type Child } from "../api/children";
+ import { useI18n } from "../i18n/I18nContext";
+-import { avatarFor } from "../lib/avatar";
++import { Avatar } from "../components/avatars";
+ import ScreenCard from "../components/ScreenCard";
+ 
+ export default function WhoExplores() {
+   const [children, setChildren] = useState<Child[]>([]);
+   const [error, setError] = useState("");
+   const [loaded, setLoaded] = useState(false);
+   const navigate = useNavigate();
+   const { t } = useI18n();
+ 
+   useEffect(() => {
+@@ -28,36 +28,39 @@ export default function WhoExplores() {
+         </p>
+       </div>
+       {error && <p role="alert">{error}</p>}
+       {loaded && children.length === 0 && !error && (
+         <p style={{ color: "#0a5a53", fontWeight: 600 }}>{t("who.empty")}</p>
+       )}
+       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+         {children.map((c) => (
+           <button
+             key={c.id}
+-            onClick={() => navigate(`/explorar/${c.id}`, { state: { name: c.name } })}
++            onClick={() => navigate(`/explorar/${c.id}`, { state: { name: c.name, avatar: c.avatar } })}
+             style={{ display: "flex", alignItems: "center", gap: 14, textAlign: "left", padding: 16 }}
+           >
+-            <span style={{ fontSize: 30 }}>{avatarFor(c.id)}</span>
++            <Avatar id={c.avatar} size={46} />
+             <span style={{ flex: 1 }}>
+               <strong style={{ display: "block", fontSize: 18 }}>{c.name}</strong>
+               <span style={{ fontSize: 13, color: "#0a5a53" }}>
+                 {c.age} {t("common.yearsOld")}
+               </span>
+             </span>
+             <span style={{ color: "var(--coral)", fontSize: 22 }}>→</span>
+           </button>
+         ))}
+       </div>
+       <Link to="/familia/nuevo" style={{ textAlign: "center", marginTop: 4 }}>
+         {t("who.addExplorer")}
+       </Link>
+       <p style={{ fontSize: 12, color: "#0a5a53", textAlign: "center", margin: "8px 0 0" }}>
+         {t("who.demoHint")}
+       </p>
+       <Link to="/familia/ia" style={{ textAlign: "center", marginTop: 4 }}>
+         {t("aiPanel.link")}
+       </Link>
++      <Link to="/familia/cuentos" style={{ textAlign: "center", marginTop: 4 }}>
++        {t("familyStories.link")}
++      </Link>
+     </ScreenCard>
+   );
+ }
+diff --git a/frontend/src/styles/theme.css b/frontend/src/styles/theme.css
+index 34d67b8..1b5ba68 100644
+--- a/frontend/src/styles/theme.css
++++ b/frontend/src/styles/theme.css
+@@ -104,10 +104,45 @@ body {
+   background: #fff;
+   border: none;
+   border-radius: 16px;
+   min-height: 52px;
+   box-shadow: 0 4px 12px rgba(8, 67, 62, 0.12);
+   cursor: pointer;
+ }
+ 
+ .screen-card a { color: var(--teal); font-weight: 800; text-decoration: none; }
+ .screen-card h1 { font-family: var(--font-head); color: var(--teal-dark); line-height: 1.15; }
++
++/* Botón secundario (p. ej. "Ya tengo cuenta · Entrar") */
++.btn-secondary {
++  background: #fff;
++  color: var(--teal-dark);
++  border: none;
++  border-radius: 16px;
++  padding: 15px;
++  min-height: 50px;
++  width: 100%;
++  font-family: var(--font-head);
++  font-size: 17px;
++  font-weight: 600;
++  box-shadow: 0 6px 14px rgba(8, 67, 62, 0.16);
++  cursor: pointer;
++}
++
++/* Permite usar <Link> con estilo de botón sin perder el centrado */
++a.btn-primary,
++a.btn-secondary {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  text-decoration: none;
++}
++a.btn-primary { color: #fff; }
++a.btn-secondary { color: var(--teal-dark); }
++
++/* Marca de bienvenida */
++.brand-mark {
++  font-family: var(--font-head);
++  font-weight: 700;
++  letter-spacing: -0.01em;
++  margin: 6px 0 0;
++}

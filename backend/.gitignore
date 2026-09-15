@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.venv/
+.env
+.pytest_cache/
+.ruff_cache/
+# Ruta absoluta de máquina para el reporter de TDD Guard (ver pytest.ini.example)
+pytest.ini
+*.db
+*.egg-info/

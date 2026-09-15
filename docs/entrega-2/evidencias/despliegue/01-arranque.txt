@@ -1,0 +1,6 @@
+ Container chispa-ollama-1 Started 
+ Container chispa-postgres-1 Healthy 
+ Container chispa-backend-1 Starting 
+ Container chispa-backend-1 Started 
+ Container chispa-frontend-1 Starting 
+ Container chispa-frontend-1 Started 

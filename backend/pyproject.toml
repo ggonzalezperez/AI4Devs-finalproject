@@ -1,0 +1,61 @@
+[project]
+name = "chispa-backend"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "email-validator>=2.1",
+    "passlib[bcrypt]>=1.7",
+    "bcrypt<4.1",
+    "pyjwt>=2.8",
+    "psycopg[binary]>=3.1",
+    "alembic>=1.13",
+    "httpx>=0.27",
+    "cryptography>=42",
+]
+
+[project.optional-dependencies]
+# ruff se fija a una versión exacta: sus reglas por defecto cambian entre
+# versiones menores, y con el rango abierto la CI instalaba una distinta que
+# la local y fallaba sin que hubiera cambiado el código.
+dev = ["pytest>=8.2", "httpx>=0.27", "ruff==0.16.7"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+# Selección explícita: no heredar los valores por defecto del linter, que
+# cambian entre versiones.
+#   E/W pycodestyle · F pyflakes · I imports ordenados · UP sintaxis moderna
+#   B  bugbear (errores sutiles reales)
+select = ["E", "W", "F", "I", "UP", "B"]
+# E501 (longitud de línea) queda fuera a propósito: el proyecto nunca la ha
+# aplicado y reformatear 63 líneas heredadas no aporta nada ahora. `line-length`
+# se mantiene como guía para quien formatee.
+ignore = ["E501"]
+
+[tool.ruff.lint.flake8-bugbear]
+# B008 prohíbe llamadas en argumentos por defecto, pero `Depends(...)` en la
+# firma ES el idioma de FastAPI para declarar dependencias. Marcarlo sería un
+# falso positivo en todos los routers.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Header",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["app"]

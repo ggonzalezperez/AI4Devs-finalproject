@@ -1,0 +1,70 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-chispa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: ${POSTGRES_DB:-chispa}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-chispa}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-chispa}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-chispa}
+      JWT_SECRET: ${JWT_SECRET}
+      AI_CONFIG_KEY: ${AI_CONFIG_KEY}
+      ENVIRONMENT: production
+      # Por defecto solo localhost. Para acceso desde la red de casa (móvil/tablet),
+      # pon en .env: CORS_ORIGINS=http://localhost:5173,http://<IP-DEL-PC>:5173
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    volumes:
+      # Las imágenes generadas viven en MEDIA_DIR y la BD guarda su ruta. Sin
+      # este volumen el directorio muere con el contenedor: cada reconstrucción
+      # dejaba en la base de datos rutas apuntando a ficheros borrados, y el
+      # niño volvía a su isla y encontraba la ilustración rota.
+      - media:/app/media
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Por defecto localhost. Para la red de casa, pon en .env:
+        # VITE_API_URL=http://<IP-DEL-PC>:8000  (debe coincidir con CORS_ORIGINS)
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  ollama:
+    image: ollama/ollama
+    volumes:
+      - ollama:/root/.ollama
+    # Solo accesible desde la propia máquina (no expuesto a la red). El backend
+    # lo alcanza por la red interna de Docker en http://ollama:11434.
+    ports:
+      - "127.0.0.1:11434:11434"
+    # GPU (descomenta si tienes nvidia-container-toolkit instalado):
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+volumes:
+  pgdata:
+  ollama:
+  media:
