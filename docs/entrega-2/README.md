@@ -4,7 +4,7 @@
 > Fecha: **14 de septiembre de 2026** · Rama: `entrega_2`
 
 La Entrega 1 fue documental: definía qué construir y cómo. Ésta es el código, y **el MVP está
-completo**: las 10 historias de usuario implementadas, 203 pruebas automatizadas en verde y la
+completo**: las 10 historias de usuario implementadas, 204 pruebas automatizadas en verde y la
 aplicación arrancando de punta a punta con Docker Compose.
 
 ---
@@ -32,7 +32,7 @@ Documentos de referencia fuera de esta carpeta:
 | Estructura de frontend y backend | ✅ | 4 capas en backend; pantallas, componentes y cliente tipado en frontend |
 | Persistencia / modelo de datos | ✅ | 7 entidades, 11 migraciones aditivas, SQLite y PostgreSQL |
 | Flujos principales conectados | ✅ | 10 de 10 historias · [estado-implementacion.md §2](estado-implementacion.md) |
-| Primeras pruebas automatizadas | ✅ | **143 backend + 60 frontend**, CI en GitHub Actions |
+| Primeras pruebas automatizadas | ✅ | **144 backend + 60 frontend**, CI en GitHub Actions |
 | Documentación actualizada | ✅ | Esta carpeta + `docs/entrega-1/` corregida donde divergía |
 | Bitácora del uso de IA | ✅ | [`docs/entrega-1/05-ai-log/`](../entrega-1/05-ai-log/prompts.md) |
 | Evidencias del funcionamiento | ✅ | [verificacion.md](verificacion.md) + [evidencias/](evidencias/) |

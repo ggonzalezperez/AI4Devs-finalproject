@@ -12,8 +12,8 @@
 ---
 
 > ℹ️ **Nota sobre esta entrega (Entrega 2 — Código funcional).**
-> El MVP está **completo**: las **10 historias de usuario** implementadas, **203 pruebas automatizadas**
-> en verde (143 backend + 60 frontend) y la aplicación arrancando de punta a punta con Docker Compose.
+> El MVP está **completo**: las **10 historias de usuario** implementadas, **204 pruebas automatizadas**
+> en verde (144 backend + 60 frontend) y la aplicación arrancando de punta a punta con Docker Compose.
 > Esta rama incluye **el código**, además de la documentación.
 >
 > La Entrega 1 fue documental y su material se conserva en [`docs/entrega-1/`](docs/entrega-1/README.md)
@@ -296,7 +296,7 @@ datos personales del niño.
 
 ### **2.6. Tests**
 
-> **203 pruebas en verde: 143 backend (32 ficheros) + 60 frontend (31).** `ruff` y `tsc --noEmit`
+> **204 pruebas en verde: 144 backend (32 ficheros) + 60 frontend (31).** `ruff` y `tsc --noEmit`
 > limpios; CI en GitHub Actions ejecuta lint y tests en cada *push*. Salidas reales en
 > [`docs/entrega-2/verificacion.md`](docs/entrega-2/verificacion.md); estrategia en
 > [`docs/entrega-1/03-testing/`](docs/entrega-1/03-testing/).

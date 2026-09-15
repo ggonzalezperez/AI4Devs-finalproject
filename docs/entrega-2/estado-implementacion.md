@@ -17,7 +17,7 @@ El MVP está completo: **las 10 historias de usuario están implementadas y veri
 | Medida | Entrega 1 (documental) | Hoy |
 |---|---|---|
 | Historias implementadas | 0 (propuesta) | **10 de 10** |
-| Tests backend | 0 | **143** (32 ficheros) |
+| Tests backend | 0 | **144** (32 ficheros) |
 | Tests frontend | 0 | **60** (31 ficheros) |
 | Endpoints | 27 previstos | **28 implementados** (+ `/health`) |
 | Migraciones | 11 previstas | **11 aplicadas** (SQLite y PostgreSQL) |

@@ -149,7 +149,7 @@ Documentación interactiva completa en **`/docs`** (Swagger).
 ## 🧪 Tests y calidad
 
 ```bash
-cd backend && pytest -q && ruff check .             # 143 tests
+cd backend && pytest -q && ruff check .             # 144 tests
 cd frontend && npm test && npm run lint            # 60 tests · tsc --noEmit
 ```
 Migraciones Alembic siempre aditivas (no destructivas). CI en `.github/workflows/ci.yml` (lint + tests).

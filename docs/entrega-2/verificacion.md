@@ -9,7 +9,7 @@
 
 ```
 $ cd backend && python -m pytest -q
-143 passed, 1 warning in 20.89s
+144 passed, 1 warning in 20.64s
 
 $ cd backend && python -m ruff check .
 All checks passed!
@@ -22,7 +22,7 @@ $ cd frontend && npm run lint      # tsc --noEmit
 (sin salida: sin errores)
 ```
 
-Evolución: backend **108 → 143**, frontend **48 → 60**.
+Evolución: backend **108 → 144**, frontend **48 → 60**.
 Avisos de deprecación: **4 → 1** (el restante pide migrar a `httpx2`, decisión aplazada).
 
 ### Cobertura por riesgo
