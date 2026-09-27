@@ -71,6 +71,57 @@ Están en `.claude/skills/` como **skills propias**, adaptadas de `lidr-specboot
 
 ---
 
+## 0.bis Entrega 3 — publicar, endurecer y cazar fallos silenciosos
+
+El flujo no cambió: **brief → implementación con TDD → verificación con evidencias → revisión →
+commit**. Lo que cambió fue el tipo de problema. Con la aplicación en internet aparecieron fallos que
+**no se reproducen en local**, y una categoría concreta acaparó el trabajo: el **fallo silencioso**.
+
+> Un fallo silencioso es el que no produce ningún error visible. La familia configura un proveedor de
+> IA, la aplicación responde `200`, y el niño recibe contenido del generador de demo mientras el adulto
+> cree estar pagando por IA. No hay traza, no hay alerta, no hay nada que mirar.
+
+Se cerraron cuatro del mismo patrón en una jornada: un proveedor de imagen inválido que se guardaba
+con `200` en lugar de `422`, un panel que no avisaba de una configuración inservible, un adaptador que
+reventaba con `KeyError` ante una respuesta inesperada, y un cliente HTTP que **destruía el motivo
+real** de los errores al llamar a `JSON.parse` antes de comprobar el código de estado.
+
+### Los tres prompts que sostuvieron esta fase
+
+| Prompt / skill | Qué produjo |
+|---|---|
+| `chispa-brief` sobre la lista de deuda pendiente | [`task-e3-cierre-brief.md`](.superpowers/sdd/briefs/task-e3-cierre-brief.md): alcance cerrado, **lo que NO entra** con su motivo, tabla de validación con el nombre de cada test y los riesgos con su mitigación |
+| `superpowers:systematic-debugging` ante un alta fallida en la demo | Prohibió proponer arreglos antes de tener causa raíz. Llevó a leer el cliente HTTP y encontrar que el error real nunca llegaba a la pantalla |
+| `chispa-verificar` | [`task-e3-cierre-report.md`](.superpowers/sdd/reports/task-e3-cierre-report.md): suites con números reales, migraciones, cuatro casos de `curl` contra el servidor y E2E en Chrome real, escritorio y móvil |
+
+### Lo que salió mal en esta fase
+
+Cuatro errores, y ninguno lo detectó el modelo por sí solo: los detectó **verificar contra una fuente
+externa** en lugar de confiar en lo escrito.
+
+- **Una anotación del propio libro mayor era falsa, y seguirla habría roto código que funcionaba.**
+  Arrastraba desde semanas atrás un *«falta `response_format=b64_json`»* en el adaptador de OpenAI. Al
+  contrastarlo con la documentación del proveedor resultó ser **al revés**: ese parámetro existe solo
+  para `dall-e-2` y `dall-e-3`, mientras que la familia `gpt-image-*` —la única del catálogo— lo
+  **rechaza** y ya devuelve *base64* de serie. Añadirlo habría convertido un adaptador operativo en un
+  `400` que el *best-effort* se habría tragado en silencio. Se cerró **al contrario de como estaba
+  escrito**, con un test centinela que se pone rojo si alguien vuelve a intentarlo, y se corrigió la
+  anotación: dejarla induciría el error otra vez.
+  **Lección: una tarea pendiente escrita por una sesión anterior no es evidencia, es una hipótesis.**
+- **La documentación afirmaba un mecanismo de acceso que no existía.** El documento de despliegue decía
+  que la demo usaba *One-time PIN* «sin proveedor de identidad». Era falso: el único método activo
+  exigía **cuenta propia de Cloudflare**, así que un revisor externo no habría podido entrar jamás,
+  tuviera su correo autorizado o no. Solo se ve probando **en una ventana de incógnito**: con la sesión
+  del propietario abierta, todo parece funcionar.
+- **Una hipótesis plausible y falsa, descartada antes de tocar producción.** Se sospechó que un ajuste
+  de caché del CDN estaba anulando la cabecera `no-store` del servidor. En lugar de cambiar la
+  configuración por si acaso, se **midieron las cabeceras reales**: llegaban intactas. No se tocó nada.
+- **El ejemplo de una skill propia estaba caducado.** `chispa-verificar` proponía dar de alta
+  `demo@chispa.test`, y el validador de correo rechaza `.test` por ser un dominio reservado: quien
+  siguiera la skill al pie de la letra se atascaba con un `422` en lugar de obtener un token.
+
+---
+
 ## Pipeline de prompts (común a todas las secciones)
 
 Todos los documentos se generan con la misma cadena. Estos dos prompts **preceden** a los de cada sección:

@@ -52,28 +52,48 @@ pedagógica.
 
 ### **0.4. URL del proyecto:**
 
-> **Sin URL pública todavía; despliegue autoalojado verificado.** Chispa es una aplicación pensada para
-> correr en casa, y así se ha comprobado: `docker compose up --build -d` levanta Postgres, backend,
-> frontend y Ollama, aplica las **11 migraciones sobre base vacía** y responde en
-> `http://localhost:5173` (API y Swagger en `:8000`). Desde el móvil o la tablet de casa se entra por
-> **LAN con QR** desde la propia app.
+## 🌐 **https://chispa.chispalearn.com**
+
+**Aplicación desplegada y en funcionamiento.** Corre en una máquina doméstica y se publica mediante un
+**túnel de Cloudflare**, con dominio propio, HTTPS y **Cloudflare Access** delante.
+
+> **Cómo entrar.** Hay **dos puertas independientes**, y conviene saberlo porque si no parece que la
+> aplicación esté rota:
 >
-> La salida literal de ese arranque está en
-> [`docs/entrega-2/evidencias/despliegue/`](docs/entrega-2/evidencias/despliegue/). El despliegue
-> público con HTTPS es trabajo de la Entrega 3; su diseño ya está escrito en
-> [`docs/superpowers/specs/`](docs/superpowers/specs/).
+> 1. **Cloudflare Access** — pide un código de 6 dígitos por email. Pasarlo **no** te mete en la
+>    aplicación: te deja ver su pantalla de bienvenida. Es lo esperado.
+> 2. **Chispa** — email y contraseña de la familia de demostración.
 >
-> **Para probarlo en cinco minutos** no hace falta ninguna clave de IA: sin proveedor configurado la
-> aplicación funciona entera en modo demo. Ver §1.4.
+> Las credenciales y el correo autorizado se entregan **por el canal de entrega**, no en este
+> repositorio: lo que entra en git se queda en su historial para siempre. Si el código no llega, es
+> que la dirección no está dada de alta todavía — basta con pedirlo y se añade en treinta segundos.
+>
+> La infraestructura real está documentada en
+> [`docs/entrega-2/demo-publica.md`](docs/entrega-2/demo-publica.md): dominio, túnel como contenedor,
+> política de Access, variables propias del despliegue y límites conocidos. El recorrido sugerido para
+> revisar el producto, en [`docs/entrega-3/acceso-revisores.md`](docs/entrega-3/acceso-revisores.md).
+
+**Y también en local, sin depender de nada de lo anterior:** `docker compose up --build -d` levanta
+Postgres, backend, frontend y Ollama, aplica las **11 migraciones sobre base vacía** y responde en
+`http://localhost:5173`. **No hace falta ninguna clave de IA**: sin proveedor configurado la
+aplicación funciona entera en modo demo, por diseño (`ADR-001`). Ver §1.4.
 
 ### 0.5. URL o archivo comprimido del repositorio
 
-- **Esta entrega (documentación y código):** `github.com/ggonzalezperez/AI4Devs-finalproject`,
-  rama **`feature-entrega2-GGP`**. Contiene `readme.md`, `prompts.md`, el **código funcional completo**
-  (`backend/`, `frontend/`, `docker-compose.yml`) y la **evidencia de despliegue**.
-- **Repositorio de desarrollo:** `github.com/ggonzalezperez/chispa` — privado, es donde vive el
-  historial de commits del día a día. Todo su contenido versionado se ha volcado aquí.
-- **Entrega 1:** rama `feature-entrega1-GGP` del mismo repositorio, conservada como evidencia histórica.
+- **Entrega final:** `github.com/ggonzalezperez/AI4Devs-finalproject`, rama
+  **`finalproject-GGP`**. Contiene `readme.md`, `prompts.md`, el **código funcional completo**
+  (`backend/`, `frontend/`, `docker-compose.yml`), la documentación de las tres entregas y las
+  evidencias.
+- **Repositorio de desarrollo:** `github.com/ggonzalezperez/chispa` — privado. Es donde vive el
+  historial real de commits del día a día, tarea a tarea. Todo su contenido versionado se vuelca aquí
+  en cada entrega; se concede acceso al Teacher Assistant a solicitud.
+- **Entregas anteriores:** ramas `feature-entrega1-GGP` y `feature-entrega2-GGP` del mismo
+  repositorio, conservadas como evidencia histórica.
+
+> **Sobre el historial de commits.** Esta rama recoge el estado del producto, no su historia: el
+> desarrollo ocurrió en el repositorio privado, donde cada tarea tiene su brief, su implementación,
+> su informe de verificación y su entrada en el libro mayor (`.superpowers/sdd/`, incluido en este
+> volcado). Ese material es la mejor evidencia del proceso, y está aquí completo.
 
 ---
 
@@ -235,31 +255,61 @@ Obedece a una **arquitectura por capas** en el backend con **puerto/adaptador** 
 
 ### **2.4. Infraestructura y despliegue**
 
-Chispa es **autoalojable**: se empaqueta con **Docker Compose** (4 servicios + 2 volúmenes + red interna). Solo
-se exponen al host el **frontend (5173)** y la **API (8000)**; **Ollama** queda ligado a `127.0.0.1` (no a la
-red).
+Chispa es **autoalojable**: se empaqueta con **Docker Compose** y corre igual en un portátil que en la
+máquina que sostiene la demo pública.
+
+#### Origen único: una decisión que arregló tres problemas
+
+Hasta la Entrega 2 el frontend llamaba a la API por un host absoluto horneado en tiempo de *build*
+(`VITE_API_URL`). Eso ataba el *bundle* a una máquina concreta: al abrir la app desde el móvil por la
+IP de casa, seguía llamando a `localhost` y no funcionaba nada.
+
+Ahora **nginx sirve el SPA y enruta `/api` al backend**, y el cliente usa una ruta relativa. El
+*bundle* deja de llevar ninguna dirección dentro, así que la misma imagen vale por `localhost`, por
+IP de la red o por un dominio, **sin reconstruir**. Era además **requisito previo del HTTPS**: con dos
+orígenes, una página `https` llamando a un backend `http` habría roto por contenido mixto.
+
+#### La demo pública
 
 ```mermaid
 flowchart TB
-    subgraph host["Host (PC de casa)"]
-        subgraph docker["Red interna Docker (compose)"]
-            fe["frontend · nginx:alpine (SPA)"]
-            be["backend · python:3.12-slim · uvicorn (no-root)"]
+    internet["Internet"]
+    cf["Cloudflare · borde<br/>DNS · HTTPS · Access (One-time PIN)"]
+    subgraph vm["VM Ubuntu en TrueNAS (red doméstica)"]
+        subgraph docker["Red interna Docker"]
+            cfd["cloudflared · conector del túnel"]
+            fe["frontend · nginx<br/>SPA + enrutado /api"]
+            be["backend · uvicorn (no-root)<br/>publicado solo en 127.0.0.1"]
             pg[("postgres:16-alpine")]
-            ol["ollama · IA local :11434"]
         end
         volpg[["volumen: pgdata"]]
-        volol[["volumen: ollama"]]
+        volmedia[["volumen: media · ilustraciones"]]
     end
-    browser["Navegador / móvil (misma WiFi)"]
-    browser -->|"http://host:5173"| fe
-    browser -->|"http://host:8000 (/docs)"| be
-    fe -->|"proxy API (VITE_API_URL)"| be
-    be -->|"psycopg 5432"| pg
-    be -->|"http://ollama:11434 (interno)"| ol
+    internet --> cf
+    cf -->|"túnel saliente, sin abrir puertos"| cfd
+    cfd -->|"frontend:80"| fe
+    fe -->|"/api"| be
+    be --> pg
     pg --- volpg
-    ol --- volol
+    be --- volmedia
 ```
+
+**Por qué un túnel y no apertura de puertos:** la red doméstica está tras **doble NAT y CGNAT**, así
+que no hay puertos que abrir. El conector establece una conexión **saliente**, lo que además evita
+exponer la IP del domicilio.
+
+**Detalles que costaron diagnóstico y conviene no repetir**, todos documentados en
+[`docs/entrega-2/demo-publica.md`](docs/entrega-2/demo-publica.md):
+
+- El *public hostname* del túnel apunta a **`frontend:80`**, no a `localhost`: dentro de Docker,
+  `localhost` es el propio conector.
+- El backend se publica **solo en `127.0.0.1`**. Expuesto a la red, cualquiera podría falsificar
+  `CF-Connecting-IP` y esquivar el límite de intentos.
+- **`VITE_API_URL` no debe definirse** en un despliegue con dominio. Estuvo definida de las pruebas
+  por LAN y costó una hora de diagnóstico.
+- `index.html` se sirve con **`no-store`** y los ficheros con hash como **inmutables**. Sin eso, el
+  navegador y el borde servían el *bundle* anterior: una pantalla mostrándose **una hora entera sin
+  que llegara una sola petición al servidor**.
 
 **Proceso de despliegue:** `docker compose up --build -d`; el `docker-entrypoint.sh` del backend
 ejecuta **`alembic upgrade head`** (idempotente) y arranca uvicorn. **CI** con GitHub Actions (push + PR): job
@@ -290,15 +340,35 @@ principales:
   de 128 bits que **rota** tras cada reset.
 - **Mitigación SSRF (A10):** `validate_local_url` rechaza link-local (metadatos de nube) y `follow_redirects=False`.
 
+#### Endurecimiento al publicar en internet
+
+Publicar la aplicación convirtió en reales dos riesgos que hasta entonces eran aceptables:
+
+- **Código de invitación en el alta (A07).** Con `INVITE_CODE` definida, registrarse exige la palabra
+  o devuelve **403**. Sin ella, el registro sigue abierto, que es lo normal en una instalación
+  doméstica. Es un **secreto único y compartido**, no una invitación por persona: sirve infinitas
+  veces y revocarlo lo invalida para todos.
+- **Límite de intentos en los cinco endpoints de credenciales (A07).** Dos cubos —**por IP y por
+  cuenta**— porque la IP se falsifica tras un proxy y el email no. La IP se resuelve **fail-closed**:
+  sin `CLIENT_IP_HEADER` no se cree ninguna cabecera, que es lo que impide que alguien se declare otra
+  IP en cada intento. Contador propio en memoria en lugar de `slowapi`+Redis, decisión razonada y con
+  su disparador de revisión escrito en
+  [`ADR-008`](docs/entrega-1/02-technical-design/adr/ADR-008-rate-limiting-en-memoria-por-proceso.md).
+
+**Cloudflare Access** protege además todas las rutas, incluida `/api`. Pero es una **defensa
+perimetral y externa, no parte del producto**: por eso los dos controles anteriores se implementaron
+*dentro* de la aplicación, para que el día que se quite Access no vuelva a quedar desnuda.
+
 **Privacidad del menor:** minimización (en el alta **no** se recogen datos del niño), PIN en lugar de
 contraseña, supervisión parental, y a los proveedores de IA se les envía el **concepto** de la lección, nunca
 datos personales del niño.
 
 ### **2.6. Tests**
 
-> **204 pruebas en verde: 144 backend (32 ficheros) + 60 frontend (31).** `ruff` y `tsc --noEmit`
+> **264 pruebas en verde: 186 backend (38 ficheros) + 78 frontend (32).** `ruff` y `tsc --noEmit`
 > limpios; CI en GitHub Actions ejecuta lint y tests en cada *push*. Salidas reales en
-> [`docs/entrega-2/verificacion.md`](docs/entrega-2/verificacion.md); estrategia en
+> [`docs/entrega-2/verificacion.md`](docs/entrega-2/verificacion.md) y en los informes de
+> [`.superpowers/sdd/reports/`](.superpowers/sdd/reports/); estrategia en
 > [`docs/entrega-1/03-testing/`](docs/entrega-1/03-testing/).
 >
 > La cobertura **no persigue un porcentaje, sino el riesgo**: cada regla de seguridad del menor
