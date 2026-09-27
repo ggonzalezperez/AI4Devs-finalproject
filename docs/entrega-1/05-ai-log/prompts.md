@@ -1456,3 +1456,49 @@ existan los documentos que enlaza; declarar "terminada" con ⟦FALTA⟧ o incons
 > decisiones sobre las salidas de ambos (validaciones, alucinaciones, correcciones) se registran en formato
 > AI-LOG en [`decisiones.md`](decisiones.md); los roles que ejecutan estos prompts están en [`agentes.md`](agentes.md);
 > y el ciclo que los envuelve, en [`flujo-trabajo-ia.md`](flujo-trabajo-ia.md).
+
+---
+
+## 13 — Endurecer el acceso de la demo pública (21-09-2026)
+
+**Contexto:** aplicación recién publicada en `chispa.chispalearn.com`. Registro abierto a cualquiera
+con la URL y ningún límite de intentos en los flujos de credenciales. Rama
+`feat/acceso-invitacion-rate-limit`. Precedido de dos agentes de exploración en paralelo (backend y
+tests; frontend y documentación) y un agente de diseño.
+
+```
+Diseña el plan de implementación de dos cambios en el proyecto Chispa. NO escribas código:
+devuelve un plan detallado.
+
+(A) Código de invitación en el registro. Una única palabra secreta en el servidor (INVITE_CODE).
+Si está definida, POST /auth/register la exige y devuelve 403 si no coincide; si NO está definida,
+el registro se comporta exactamente como hoy (abierto) para que la suite actual siga verde.
+
+(B) Límite de intentos en /auth/login, /auth/register, /auth/reset-password, /auth/verify-password
+y el login por PIN del niño. Contadores por IP y por cuenta (los dos). Respuesta 429.
+
+Decisiones que debes resolver en el plan:
+1. Cómo obtener la IP real del cliente siendo que detrás de nginx+cloudflared request.client.host
+   es la IP del contenedor. Propón algo fail-closed y configurable.
+2. Dónde vive el limitador: dependencia, middleware o decorador. La cuenta viene en el cuerpo.
+3. Ventana y umbrales concretos por endpoint.
+4. Cómo no romper los 144 tests existentes.
+5. Si añadir dependencia externa o escribir ~60 líneas propias. Justifica.
+6. Qué documentación actualizar: entrega-1 se conserva en futuro y NO se reescribe.
+```
+
+**Resultado:** plan por fases que se siguió casi íntegro. Produjo tres aciertos que no estaban en la
+petición: detectó que `Settings` lee `.env` y que por tanto un `INVITE_CODE` local rompería la suite
+en la máquina del desarrollador y no en CI (de ahí el segundo fixture `autouse`); contó los intentos
+por test de la suite existente para comprobar que ningún umbral se rozaba; y avisó de que
+`historias-usuario.md:378` era un falso positivo del grep, porque habla de los reintentos del quiz y
+no del límite de acceso.
+
+Implementación: 35 tests de backend nuevos (144 → 179) y 6 de frontend (67 → 73), en ciclos de un
+test cada vez, forzados por el guardián de TDD del repositorio.
+
+**Corrección manual:** dos. La descrita en AI-LOG-008 (invertir el valor por defecto de la cabecera
+de IP a fail-closed y cerrar el puerto 8000 a `127.0.0.1`). Y la convención de nombres: el plan
+proponía nombres de test en español siguiendo mi petición, cuando el estándar del repositorio
+(`docs/estandares/backend.md:114`) los exige en inglés; el propio agente lo señaló como discrepancia
+en vez de obedecer, y se corrigió antes de escribir nada.

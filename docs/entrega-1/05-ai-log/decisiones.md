@@ -209,3 +209,101 @@ nunca se equivoca no demuestra que hubo validación, demuestra que no la hubo.
 - **Excepción razonada:** los modelos de **Ollama no se tocaron**. Son locales: un tag antiguo se
   sigue pudiendo descargar, así que no caducan como los de una API de pago. Cambiarlos sin datos de
   hardware reales habría empeorado el recomendador.
+
+## AI-LOG-008 · 21-09-2026 · decisión + corrección manual
+
+**Contexto:** la aplicación se publicó en internet (`chispa.chispalearn.com`) y el registro estaba
+abierto y sin límite de intentos. Se implementaron el código de invitación y el límite, dirigiendo a
+la IA con un plan previo (exploración en paralelo → diseño → plan aprobado → TDD).
+
+- **Qué pasó:** el diseño propuesto por el modelo daba por bueno leer `X-Forwarded-For` para conocer
+  la IP del cliente detrás del túnel. Al revisarlo se vio que eso convertía el control en
+  decorativo: con el puerto 8000 publicado en la LAN, cualquiera falsifica una IP por intento y el
+  cubo por IP deja de contar nada.
+- **Cómo se detectó:** revisando el propio plan antes de implementar, no por un test. El diseño
+  mencionaba el riesgo en un párrafo pero proponía la variable con valor por defecto activo.
+- **Corrección:** el comportamiento se invirtió a **fail-closed**: sin `CLIENT_IP_HEADER` no se cree
+  ninguna cabecera, y el despliegue público se cambió para atar el backend a `127.0.0.1:8000`. Hay
+  un test que lo sujeta (`test_uses_the_socket_peer_when_no_header_is_configured`), y el cubo por
+  cuenta —que no es falsificable— actúa como segunda línea.
+- **Lección:** cuando un control de seguridad depende de un dato que viene del cliente, el valor por
+  defecto tiene que ser *no fiarse*. Un plan que menciona el riesgo pero deja el valor inseguro por
+  defecto es peor que uno que no lo menciona, porque parece revisado.
+
+## AI-LOG-009 · 21-09-2026 · validación
+
+- **Qué pasó:** el limitador necesita saber a qué cuenta imputar el intento, y el email viaja en el
+  cuerpo de la petición. Leerlo en una dependencia, antes de que Pydantic valide el cuerpo, es el
+  punto frágil del diseño: si el cuerpo no quedara cacheado, todos los endpoints empezarían a ver
+  cuerpos vacíos y a devolver 422 aunque la petición fuese correcta.
+- **Cómo se detectó:** no se detectó un fallo, se **previno**: se escribió un test de regresión
+  (`test_a_malformed_json_body_still_returns_422`) antes de dar el diseño por bueno, y los ~20 tests
+  de login y registro existentes hacen de red adicional.
+- **Corrección:** ninguna; el comportamiento de Starlette es el esperado. Queda escrito en ADR-008
+  por qué funciona, para que quien lo toque sepa qué está sosteniendo.
+- **Lección:** cuando una pieza depende de un detalle de implementación de un framework, el test que
+  lo sujeta vale más que el comentario que lo explica. Aquí se escribieron los dos.
+
+## AI-LOG-010 · 21-09-2026 · decisión
+
+- **Qué pasó:** el túnel de Cloudflare no pudo instalarse como servicio del sistema en la VM porque
+  **se había perdido la contraseña de `sudo`** del usuario. La alternativa inmediata era recuperarla
+  por consola VNC, en modo de recuperación, en mitad del despliegue.
+- **Decisión:** no arreglar eso entonces. El conector se levantó como **un contenedor más** del
+  mismo `docker compose`, con `restart: unless-stopped`. No necesita root, se gestiona con los
+  mismos comandos que el resto de la aplicación y sobrevive a reinicios igual que un servicio.
+- **Efecto secundario que hubo que entender:** al correr dentro de Docker, `localhost` es el propio
+  conector, así que el destino del túnel es `frontend:80` y no `localhost:5173`. Un despiste ahí
+  deja la web caída sin ningún error evidente.
+- **Lección:** un bloqueo operativo no siempre exige resolverse en el momento; a veces la vía
+  alternativa es mejor que la original. Queda anotado como deuda con su disparador, para que no se
+  olvide que la VM sigue sin poder actualizarse.
+
+## AI-LOG-011 · 21-09-2026 · hallazgo · tres fallos que solo existen en producción
+
+**Contexto:** primera sesión de uso real de la aplicación publicada, desde un móvil y por el dominio
+propio. Los 182 tests estaban verdes y ninguno de los tres fallos aparecía en desarrollo.
+
+- **Qué pasó, en cadena:**
+  1. El formulario de alta salía **sin el campo de código de invitación**. Causa: nginx no enviaba
+     ninguna cabecera de caché, así que el navegador y el borde de Cloudflare conservaban el bundle
+     del despliegue anterior. Los registros lo demostraron: nginx **no recibió ni una petición** en
+     una hora mientras la pantalla se mostraba.
+  2. Corregido eso, el alta fallaba con un error de red. El `.env` de la VM conservaba
+     `VITE_API_URL=http://192.168.31.18:8000` de cuando se probaba por la red de casa. Esa variable
+     hornea la dirección dentro del bundle: la app publicada llamaba a otra máquina, por `http`
+     desde una página `https`, y a un puerto que se había cerrado esa misma tarde.
+  3. Corregido eso, llegó un **405**. El cliente calculaba la base de la API con
+     `import.meta.env.VITE_API_URL ?? "/api"`, y el `Dockerfile` define la variable como **cadena
+     vacía**. `??` solo cubre `undefined`, así que la base quedaba en `""` y las peticiones salían a
+     `/auth/register`, que nginx sirve como fichero estático.
+- **Cómo se detectaron:** los dos primeros leyendo los registros del servidor y comparando con lo
+  que mostraba la pantalla; el tercero con el panel de red del navegador, donde la presencia de una
+  petición **preflight** delataba que la llamada iba a otro origen.
+- **Corrección:** cabeceras de caché en nginx (`no-store` para `index.html`, inmutable para los
+  assets), retirada de `VITE_API_URL` del despliegue, y `?.trim() || "/api"` en el cliente, con un
+  test que recarga el módulo con la variable vacía.
+- **Lección:** los tres comparten forma. Son **diferencias entre el entorno de desarrollo y la
+  imagen de producción**, no errores de lógica: en desarrollo la variable no existe, el servidor no
+  cachea y no hay proxy delante. Ninguna suite de tests los habría encontrado sin ejecutar la
+  aplicación desplegada. La verificación contra el despliegue real no es un extra del método: es
+  donde vive esta clase de fallo.
+
+## AI-LOG-012 · 21-09-2026 · validación + decisión
+
+- **Qué pasó:** las ilustraciones pesaban entre 1,5 y 3 MB. Nadie lo había notado porque en local
+  la red no duele; en el móvil son megas por lección. La causa: a OpenAI no se le pedían ni formato
+  ni calidad, y por defecto devuelve PNG al máximo.
+- **Cómo se detectó:** un aviso de nginx en los registros —*an upstream response is buffered to a
+  temporary file*— al revisar si había errores. No era un error, sino la señal de que las respuestas
+  no cabían en el búfer.
+- **Decisión y verificación:** se piden los tres parámetros que el modelo admite (`output_format`
+  webp, `output_compression` 80, `quality` medium), **confirmados contra la documentación del
+  proveedor y no de memoria**, siguiendo la lección de AI-LOG-007. Resultado medido: **74 KB frente
+  a 2,5 MB**, 34 veces menos, sin pérdida visible. Las 8 ilustraciones ya generadas se convirtieron
+  y el volumen bajó de 19 MB a 2 MB.
+- **Efecto colateral que hubo que cazar:** el fichero se guardaba siempre como `.png` viniera lo que
+  viniera, y el contenedor no conocía el tipo MIME `webp`, así que las imágenes se servían como
+  `application/octet-stream`. Dos correcciones más, cada una con su test.
+- **Lección:** revisar los registros buscando errores encontró algo que no era un error. Los avisos
+  de infraestructura describen costes que el código no declara en ninguna parte.

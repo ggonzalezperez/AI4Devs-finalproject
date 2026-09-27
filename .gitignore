@@ -9,3 +9,13 @@ backend/media/
 .claude/tdd-guard/
 # Artefactos temporales de Playwright MCP (snapshots, logs de consola)
 .playwright-mcp/
+
+# Certificados de la CA local para servir https en la red de casa.
+# Contienen claves privadas: nunca entran en el repositorio.
+certs/
+
+# Capturas recortadas del manual en PDF: material generado (docs/manual-pdf/LEEME.md)
+docs/manual-pdf/capturas/
+
+# Material de entrega con credenciales reales. NUNCA se versiona.
+_entrega-privada/

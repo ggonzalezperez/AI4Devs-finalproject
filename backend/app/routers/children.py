@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.database import get_db
-from app.deps import get_current_family_user
+from app.deps import LIMITE_PIN, get_current_family_user
 from app.models.child import Child
 from app.models.family import User
 from app.repositories import ai_config as ai_config_repo
@@ -15,7 +15,7 @@ from app.schemas.auth import Token
 from app.schemas.child import AvatarGenerate, ChildCreate, ChildPinLogin, ChildRead
 from app.schemas.knowledge import ChildProfile, KnowledgeNodeRead
 from app.security import create_token
-from app.services import child_service
+from app.services import child_service, rate_limit
 from app.services.image_generator import build_avatar_prompt
 from app.services.image_providers import build_image_generator
 
@@ -44,7 +44,9 @@ def list_children(
     ]
 
 
-@router.post("/{child_id}/login", response_model=Token)
+@router.post(
+    "/{child_id}/login", response_model=Token, dependencies=[Depends(LIMITE_PIN)]
+)
 def child_login(
     child_id: int,
     payload: ChildPinLogin,
@@ -54,6 +56,8 @@ def child_login(
     child = child_service.verify_child_pin(db, user.family_id, child_id, payload.pin)
     if not child:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="PIN incorrecto")
+    # PIN correcto: el niño legítimo no arrastra los fallos de tecleo previos.
+    rate_limit.limitador.olvidar(f"pin:cuenta:{child_id}")
     return Token(access_token=create_token(subject=str(child.id), token_type="child"))
 
 

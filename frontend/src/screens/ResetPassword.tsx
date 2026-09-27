@@ -27,7 +27,8 @@ export default function ResetPassword() {
       const res = await resetPassword(email.trim(), code.trim(), next);
       setNewCode(res.recovery_code);
     } catch (err) {
-      setError(err instanceof ApiError ? t("pwd.resetError") : t("createFamily.error"));
+      if (err instanceof ApiError && err.status === 429) setError(t("error.tooManyAttempts"));
+      else setError(err instanceof ApiError ? t("pwd.resetError") : t("createFamily.error"));
     } finally {
       setBusy(false);
     }

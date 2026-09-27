@@ -13,6 +13,7 @@ export default function CreateFamily() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [pending, setPending] = useState<{ token: string; code: string } | null>(null);
@@ -35,7 +36,12 @@ export default function CreateFamily() {
     }
     setBusy(true);
     try {
-      const { access_token, recovery_code } = await registerFamily(name, email, password);
+      const { access_token, recovery_code } = await registerFamily(
+        name,
+        email,
+        password,
+        inviteCode.trim() || undefined,
+      );
       setPending({ token: access_token, code: recovery_code });
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("createFamily.error"));
@@ -99,6 +105,13 @@ export default function CreateFamily() {
             onChange={(e) => setConfirm(e.target.value)}
             required
           />
+        </label>
+        <label>
+          {t("field.inviteCode")}
+          <input value={inviteCode} onChange={(e) => setInviteCode(e.target.value)} />
+          <span style={{ display: "block", color: "#0a5a53", fontWeight: 500, fontSize: 12 }}>
+            {t("createFamily.inviteHint")}
+          </span>
         </label>
         {error && (
           <p role="alert" style={{ color: "#c0392b", margin: 0, fontWeight: 700, fontSize: 14 }}>

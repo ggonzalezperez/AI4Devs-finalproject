@@ -233,6 +233,15 @@ export default function AIConfigPanel() {
         {imageProvider !== "none" && !currentImg?.needs_key && !currentImg?.needs_base_url && (
           <small style={{ color: "var(--green)", fontWeight: 700 }}>{t("aiPanel.imgNoSetup")}</small>
         )}
+        {/* Se deriva del render, no del guardado: así avisa también al ABRIR una
+            configuración que ya estaba así, que es como el fallo pasó inadvertido.
+            `status` y no `alert`: es información sobre el estado, no un error del
+            adulto, y `alert` está reservado aquí a los fallos de guardado. */}
+        {imageProvider !== "none" && !imageEnabled && (
+          <small role="status" style={{ color: "#8a5a00", fontWeight: 700 }}>
+            {t("aiPanel.imgDisabledWarning")}
+          </small>
+        )}
         {error && <p role="alert" style={{ color: "#c0392b", fontWeight: 700, margin: 0 }}>{error}</p>}
         {saved && <p style={{ color: "var(--green)", fontWeight: 700, margin: 0 }}>{t("aiPanel.saved")} ✓</p>}
         <Button onClick={() => void save()}>{t("aiPanel.save")}</Button>

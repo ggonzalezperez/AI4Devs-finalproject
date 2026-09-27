@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Chispa — Manual de uso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Mulish:wght@400;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --coral:#ff7a59; --teal:#0e837b; --teal-dark:#08433e; --teal-mid:#0e5b56;
+    --teal-light:#4cc0b6; --teal-pale:#aeeae3;
+    --paper:#e8e6e1; --cream:#fbf3e0; --green:#2aa06a; --amber:#e0892f;
+    --gold:#ffc24d; --grey:#6b6760;
+    --head:"Fredoka",system-ui,sans-serif;
+    --body:"Mulish",system-ui,sans-serif;
+    --mono:"Space Grotesk",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:var(--body); color:var(--teal-dark); background:#fff;
+    font-size:10.5pt; line-height:1.62; -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+
+  /* ---------- Paginación ----------
+     Los márgenes se declaran en CSS (no en las opciones de page.pdf), porque así
+     `@page :first` puede ponerlos a cero y la portada sangra de verdad. Efecto
+     secundario buscado: sin margen inferior en la primera página, Chrome no pinta
+     ahí el pie, así que la portada sale limpia y la numeración empieza a verse
+     en la página 2. */
+  @page{ size:A4; margin:18mm 16mm 20mm; }
+  @page :first{ margin:0; }
+
+  /* ---------- Portada ---------- */
+  .cover{
+    padding:52mm 22mm 0; height:297mm;
+    background:linear-gradient(160deg,#0e837b 0%,#0b6d66 45%,#08433e 100%);
+    color:#fff; position:relative; overflow:hidden; page-break-after:always;
+  }
+  /* Halo decorativo. Con `radial-gradient` y paradas translúcidas el rasterizado
+     lo convertía en un manchón grisáceo; un círculo de color plano con opacidad
+     sobrevive intacto al paso por PDF. */
+  .cover::after{
+    content:""; position:absolute; right:-60mm; bottom:-60mm;
+    width:130mm; height:130mm; border-radius:50%;
+    background:#4cc0b6; opacity:.16;
+  }
+  .cover .spark{font-size:40pt; line-height:1; margin-bottom:6mm;}
+  .cover h1{
+    font-family:var(--head); font-weight:700; font-size:46pt; line-height:1.03;
+    margin:0 0 5mm; letter-spacing:-.015em;
+  }
+  .cover .tagline{
+    font-size:14pt; line-height:1.45; font-weight:600; max-width:120mm;
+    color:#d9f4f0; margin:0 0 14mm;
+  }
+  .cover .rule{width:34mm; height:5px; border-radius:3px; background:var(--coral); margin-bottom:9mm;}
+  .cover .who{font-family:var(--mono); text-transform:uppercase; letter-spacing:.09em; font-size:9.5pt; color:var(--teal-pale);}
+  .cover .who strong{display:block; font-family:var(--body); text-transform:none; letter-spacing:0; font-size:12.5pt; color:#fff; margin-top:2mm; font-weight:700;}
+  .cover .foot{position:absolute; left:22mm; bottom:20mm; font-size:9.5pt; color:#9fd8d1;}
+
+  /* ---------- Rejilla de la portada: qué encontrarás ---------- */
+  .cover .chips{display:flex; flex-wrap:wrap; gap:3mm; max-width:140mm;}
+  .cover .chip{
+    background:rgba(255,255,255,.13); border:1px solid rgba(255,255,255,.22);
+    border-radius:999px; padding:2.2mm 5mm; font-size:9.5pt; font-weight:700;
+  }
+
+  /* ---------- Estructura ---------- */
+  h2{
+    font-family:var(--head); font-weight:600; font-size:21pt; color:var(--teal-dark);
+    margin:0 0 4mm; line-height:1.15; letter-spacing:-.01em;
+    page-break-after:avoid; break-after:avoid;
+  }
+  h3{
+    font-family:var(--head); font-weight:500; font-size:13.5pt; color:var(--teal);
+    margin:8mm 0 2.5mm; page-break-after:avoid; break-after:avoid;
+  }
+  .sec{page-break-before:always; break-before:page;}
+  .overline{
+    font-family:var(--mono); text-transform:uppercase; letter-spacing:.1em;
+    font-size:8.5pt; font-weight:700; color:var(--coral); margin:0 0 2mm;
+  }
+  .lead{font-size:11.5pt; color:var(--teal-mid); line-height:1.55; margin:0 0 6mm; max-width:150mm;}
+  p{margin:0 0 3.4mm;}
+  strong{font-weight:800;}
+  ul,ol{margin:0 0 4mm; padding-left:6mm;}
+  li{margin-bottom:1.6mm;}
+  code{
+    font-family:var(--mono); font-size:9pt; background:var(--cream);
+    border:1px solid #efe2c4; border-radius:5px; padding:.5mm 1.6mm; color:var(--teal-dark);
+  }
+
+  /* ---------- Tablas ---------- */
+  table{width:100%; border-collapse:collapse; margin:0 0 5mm; font-size:9.8pt; page-break-inside:avoid;}
+  th{
+    background:var(--teal-dark); color:#fff; text-align:left; padding:2.6mm 3mm;
+    font-family:var(--head); font-weight:500; font-size:10pt;
+  }
+  th:first-child{border-radius:8px 0 0 0;} th:last-child{border-radius:0 8px 0 0;}
+  td{padding:2.6mm 3mm; border-bottom:1px solid #e3ded4; vertical-align:top;}
+  tr:nth-child(even) td{background:#faf8f4;}
+
+  /* ---------- Figuras ---------- */
+  figure{margin:0 0 5mm; page-break-inside:avoid; break-inside:avoid;}
+  figure img{
+    display:block; width:100%; height:auto; border-radius:14px;
+    box-shadow:0 3px 16px rgba(8,67,62,.16); background:var(--paper);
+  }
+  figcaption{
+    font-size:8.8pt; color:var(--grey); margin-top:2mm; line-height:1.45;
+    border-left:2.5px solid var(--coral); padding-left:3mm;
+  }
+  figcaption b{color:var(--teal-dark); font-weight:800;}
+  .shots{display:flex; gap:5mm; page-break-inside:avoid; break-inside:avoid;}
+  .shots figure{flex:1; margin-bottom:5mm;}
+  /* Una figura sola se centra: alineada a la izquierda dejaba media página vacía
+     a la derecha y parecía un descuadre en vez de una decisión. */
+  .narrow{max-width:104mm; margin-left:auto; margin-right:auto;}
+  .narrow figcaption{text-align:left;}
+  .phone img{max-width:62mm; margin:0 auto;}
+
+  /* ---------- Avisos ---------- */
+  .box{
+    border-radius:12px; padding:4mm 5mm; margin:0 0 5mm; font-size:10pt;
+    page-break-inside:avoid; break-inside:avoid;
+  }
+  .box p:last-child{margin-bottom:0;}
+  .box .t{font-family:var(--head); font-weight:600; font-size:11pt; margin-bottom:1.5mm; display:block;}
+  .tip{background:#e6f7ee; border-left:4px solid var(--green);}
+  .tip .t{color:#1c7a50;}
+  .warn{background:#fff1d6; border-left:4px solid var(--amber);}
+  .warn .t{color:#9a5c10;}
+  .key{background:#fdeee9; border-left:4px solid var(--coral);}
+  .key .t{color:#c2482a;}
+
+  .code-block{
+    font-family:var(--mono); font-size:11pt; letter-spacing:.06em; text-align:center;
+    background:var(--teal-dark); color:var(--gold); border-radius:10px;
+    padding:4mm; margin:0 0 4mm;
+  }
+
+  /* ---------- Índice ---------- */
+  .toc{margin:0; padding:0; list-style:none; columns:2; column-gap:10mm;}
+  .toc li{
+    break-inside:avoid; margin-bottom:2.4mm; padding-left:9mm; position:relative;
+    font-size:10pt; line-height:1.4;
+  }
+  .toc .n{
+    position:absolute; left:0; top:.2mm; font-family:var(--head); font-weight:600;
+    color:var(--coral); font-size:11pt;
+  }
+  .toc b{display:block; color:var(--teal-dark); font-weight:800;}
+  .toc span{color:var(--grey); font-size:9pt;}
+</style>
+</head>
+<body>
+
+<!-- ===================== PORTADA ===================== -->
+<section class="cover">
+  <div class="spark">✨</div>
+  <h1>Chispa</h1>
+  <p class="tagline">Convierte las preguntas de tus hijos en lecciones con ilustración, un reto y un mapa de islas que crece con cada cosa que descubren.</p>
+  <div class="rule"></div>
+  <p class="who">Manual de uso<strong>Para la persona adulta que administra la familia</strong></p>
+  <div style="height:12mm"></div>
+  <div class="chips">
+    <span class="chip">Crear la familia</span>
+    <span class="chip">Añadir exploradores</span>
+    <span class="chip">Configurar la IA</span>
+    <span class="chip">El día a día</span>
+    <span class="chip">Cuentos y aprobación</span>
+    <span class="chip">Seguridad</span>
+  </div>
+  <p class="foot">El niño no necesita leer nada: entra con su clave de cuatro dígitos y pregunta.</p>
+</section>
+
+<!-- ===================== ÍNDICE ===================== -->
+<section>
+  <p class="overline">Contenido</p>
+  <h2>Qué hay en este manual</h2>
+  <p class="lead">Cada apartado va acompañado de la pantalla real de la aplicación, para que reconozcas dónde estás sin tener que adivinar.</p>
+  <ul class="toc">
+    <li><span class="n">1</span><b>Dos mundos separados</b><span>Por qué tú y tu hijo veis cosas distintas</span></li>
+    <li><span class="n">2</span><b>Crear el espacio de tu familia</b><span>La cuenta y el código de recuperación</span></li>
+    <li><span class="n">3</span><b>Añadir un explorador</b><span>Alias, edad, PIN y avatar</span></li>
+    <li><span class="n">4</span><b>Elegir cómo se generan las lecciones</b><span>Demo, modelo local o tu propia clave</span></li>
+    <li><span class="n">5</span><b>El día a día del niño</b><span>Preguntar, aprender, acertar el reto</span></li>
+    <li><span class="n">6</span><b>Lo que ves tú</b><span>Panel de aprendizaje, cuentos y QR</span></li>
+    <li><span class="n">7</span><b>Seguridad y privacidad</b><span>Lo que hace por defecto</span></li>
+    <li><span class="n">8</span><b>Cuando algo no va</b><span>Mensajes y qué hacer con cada uno</span></li>
+  </ul>
+
+  <div class="box tip" style="margin-top:8mm">
+    <span class="t">Antes de empezar</span>
+    <p>Chispa <b>funciona sin configurar nada</b>. Si no eliges proveedor de IA, verás lecciones de demostración. Es a propósito: puedes probarla entera sin pagar ni registrar nada en ningún sitio.</p>
+  </div>
+</section>
+
+<!-- ===================== 1 ===================== -->
+<section class="sec">
+  <p class="overline">Apartado 1</p>
+  <h2>Dos mundos separados</h2>
+  <p class="lead">Chispa tiene dos espacios que no se mezclan. Entenderlo primero explica casi todas las decisiones que verás después.</p>
+
+  <table>
+    <tr><th style="width:26%"></th><th style="width:37%">Tú (adulto)</th><th>Tu hijo (explorador)</th></tr>
+    <tr><td><b>Cómo entra</b></td><td>Email y contraseña</td><td>Un PIN de 4 dígitos</td></tr>
+    <tr><td><b>Qué ve</b></td><td>Configuración, panel de aprendizaje, cuentos por aprobar</td><td>Sus preguntas, sus lecciones, sus islas</td></tr>
+    <tr><td><b>Qué no puede hacer</b></td><td>—</td><td>Salir de su sesión, ver ajustes, tocar la configuración de IA</td></tr>
+  </table>
+
+  <p>Mientras el niño juega, tu sesión sigue abierta en el dispositivo. Por eso <strong>salir de la sesión del niño pide tu contraseña otra vez</strong>: tener el aparato en la mano no basta para volver a los ajustes.</p>
+
+  <div class="shots">
+    <figure>
+      <img src="capturas/e2-15-salir-sesion-nino.png" alt="Pantalla para salir de la sesión del niño, que pide la contraseña de la familia">
+      <figcaption><b>Salir de la sesión del niño.</b> El enlace para llegar aquí es deliberadamente discreto: que lo encuentre un adulto y no invite a pulsarlo a un niño.</figcaption>
+    </figure>
+    <figure>
+      <img src="capturas/e2-16-salir-contrasena-incorrecta.png" alt="Mensaje de contraseña incorrecta al intentar salir de la sesión del niño">
+      <figcaption><b>Contraseña incorrecta.</b> Sin la contraseña del adulto no se sale. El niño se queda en su mundo.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ===================== 2 ===================== -->
+<section class="sec">
+  <p class="overline">Apartado 2</p>
+  <h2>Crear el espacio de tu familia</h2>
+  <p class="lead">Cuatro datos y ya está. No se piden datos del menor en ningún momento.</p>
+
+  <ol>
+    <li>Abre Chispa y pulsa <strong>Crear el espacio de mi familia</strong>.</li>
+    <li>Rellena tu nombre, tu email y una contraseña de al menos 8 caracteres.</li>
+    <li><strong>Código de invitación</strong>: solo aparece si quien te invitó te dio uno. En la demo pública hace falta; en una instalación propia, déjalo vacío.</li>
+    <li>Pulsa <strong>Crear cuenta</strong>.</li>
+  </ol>
+
+  <h3>El código de recuperación</h3>
+  <p>Justo después verás un código largo, con este aspecto:</p>
+  <div class="code-block">A3F2-91BC-7D4E-02AA-9C11-55FF-1234-ABCD</div>
+
+  <div class="box key">
+    <span class="t">Guárdalo ahora, no después</span>
+    <p>Cópialo donde guardes tus contraseñas. Es <b>lo único</b> que te permite recuperar el acceso si olvidas la tuya: Chispa no envía emails de recuperación, porque una aplicación que vive en tu propio servidor no debe depender de un servidor de correo. <b>No se puede volver a ver.</b></p>
+  </div>
+</section>
+
+<!-- ===================== 3 ===================== -->
+<section class="sec">
+  <p class="overline">Apartado 3</p>
+  <h2>Añadir un explorador</h2>
+  <p class="lead">En el panel de familia, pulsa <strong>➕ Añadir explorador</strong>. Puedes añadir tantos como quieras.</p>
+
+  <ul>
+    <li><strong>Alias</strong> — el nombre con el que aparecerá. Puedes usar un apodo; no hace falta el nombre real.</li>
+    <li><strong>Fecha de nacimiento</strong> — Chispa la usa para <strong>adaptar el lenguaje a su edad</strong>. La misma pregunta se responde distinto a los 4 años que a los 10.</li>
+    <li><strong>Clave de 4 dígitos (PIN)</strong> — la que usará para entrar. Elígela con él.</li>
+    <li><strong>Avatar</strong> — uno de los dibujos disponibles, o uno generado con IA describiéndolo con palabras.</li>
+  </ul>
+
+  <figure class="narrow">
+    <img src="capturas/e2-01-familia-tripulacion.png" alt="Pantalla ¿Quién va a explorar? con la lista de exploradores de la familia">
+    <figcaption><b>¿Quién va a explorar?</b> La tripulación de la familia. Cada explorador tiene su propio mapa y sus propias lecciones: <b>un hermano no ve lo del otro</b>.</figcaption>
+  </figure>
+</section>
+
+<!-- ===================== 4 ===================== -->
+<section class="sec">
+  <p class="overline">Apartado 4</p>
+  <h2>Elegir cómo se generan las lecciones</h2>
+  <p class="lead">Panel de familia → <strong>⚙️ Configurar IA</strong>. Hay tres caminos, y el primero no cuesta nada ni pide registro.</p>
+
+  <table>
+    <tr><th style="width:30%">Opción</th><th style="width:42%">Qué hace</th><th>Coste</th></tr>
+    <tr><td><b>Demo</b> (por defecto)</td><td>Lecciones de ejemplo, sin IA real</td><td>Ninguno</td></tr>
+    <tr><td><b>Local (Ollama)</b></td><td>Un modelo corriendo en tu propio equipo</td><td>Ninguno, pero pide un ordenador capaz</td></tr>
+    <tr><td><b>Tu clave (BYOK)</b></td><td>Usa tu cuenta de OpenAI, Claude, Gemini…</td><td>Lo que cobre tu proveedor</td></tr>
+  </table>
+
+  <figure class="narrow">
+    <img src="capturas/e2-10-panel-ia-multiproveedor.png" alt="Panel de configuración de IA con selector de proveedor y modelo">
+    <figcaption><b>Configuración de IA.</b> El panel te dice si tu equipo puede con un modelo local: escribe tu VRAM y tu RAM y pulsa <b>Recomendar</b>.</figcaption>
+  </figure>
+
+  <h3>Sobre tu clave de IA</h3>
+  <ul>
+    <li>Se guarda <strong>cifrada</strong> y <strong>nunca se muestra de vuelta</strong>, ni siquiera a ti. El panel solo indica si hay una guardada.</li>
+    <li>Para cambiarla, pega la nueva encima. Para quitarla, borra el campo y guarda.</li>
+  </ul>
+
+  <figure class="narrow">
+    <img src="capturas/e2-13-clave-invalida-rechazada.png" alt="Mensaje que rechaza una clave con formato incorrecto">
+    <figcaption><b>Una clave con mala pinta se rechaza al guardar.</b> Es deliberado: una clave inválida aceptada haría que las lecciones volvieran al modo demo <b>sin que nadie se entere</b>.</figcaption>
+  </figure>
+
+  <h3>Ilustraciones</h3>
+  <p>En el mismo panel, <strong>🖼️ Imágenes en las lecciones</strong>. La opción más fácil es <strong>Pollinations</strong>: gratis y sin clave. Con OpenAI o Gemini salen mejores, pero las pagas tú.</p>
+
+  <figure class="narrow">
+    <img src="capturas/e3-01-aviso-imagen-desactivada.png" alt="Aviso de que hay un proveedor de imagen elegido pero las imágenes están desactivadas">
+    <figcaption><b>Elegir proveedor no basta: hay que activar la casilla.</b> Si eliges uno y dejas las imágenes apagadas, el panel te avisa en vez de dejarte creer que están funcionando.</figcaption>
+  </figure>
+
+  <div class="box tip">
+    <span class="t">Si una ilustración falla</span>
+    <p>La lección <b>se muestra igual, sin imagen</b>. El niño nunca ve un error del proveedor.</p>
+  </div>
+</section>
+
+<!-- ===================== 5 ===================== -->
+<section class="sec">
+  <p class="overline">Apartado 5</p>
+  <h2>El día a día del niño</h2>
+  <p class="lead">Esto es lo que ve tu hijo. No necesita que se lo expliques: la pantalla se lo pide todo.</p>
+
+  <div class="shots">
+    <figure>
+      <img src="capturas/e2-05-acceso-nino-pin.png" alt="Pantalla de acceso del niño con teclado numérico para el PIN">
+      <figcaption><b>Entrar.</b> Toca su avatar y teclea su PIN de cuatro dígitos.</figcaption>
+    </figure>
+    <figure>
+      <img src="capturas/e2-06-encender-la-chispa.png" alt="Pantalla principal del niño preguntando qué quiere descubrir hoy">
+      <figcaption><b>Preguntar.</b> Escribiendo, tocando una sugerencia, o hablando: el micrófono 🎤 transcribe y <b>envía solo al terminar</b>.</figcaption>
+    </figure>
+  </div>
+
+  <div class="box tip">
+    <span class="t">Pensado para quien aún no escribe con soltura</span>
+    <p>Las cinco sugerencias cambian cada vez que abre la pantalla, así que nunca se encuentra lo mismo dos veces.</p>
+  </div>
+
+  <h3>La lección</h3>
+  <div class="shots">
+    <figure>
+      <img src="capturas/e2-14-chispa-esta-pensando.png" alt="Indicador de espera mientras se genera la lección">
+      <figcaption><b>Mientras piensa.</b> El aviso aparece donde va a salir la respuesta, para que mire al sitio correcto.</figcaption>
+    </figure>
+    <figure>
+      <img src="capturas/e2-07-leccion-armadura-no-bloqueada.png" alt="Una lección con su ilustración, texto y dato sorprendente">
+      <figcaption><b>La lección.</b> Texto a su edad, ilustración, un <b>dato sorprendente</b> y un botón para escucharla en voz alta.</figcaption>
+    </figure>
+  </div>
+
+  <div class="shots">
+    <figure>
+      <img src="capturas/e2-08-reto-acertado.png" alt="Reto de tres opciones con la respuesta acertada resaltada">
+      <figcaption><b>El reto 🎯.</b> Tres opciones. Acertarlo es lo que marca el tema como aprendido.</figcaption>
+    </figure>
+    <figure>
+      <img src="capturas/e2-09-archipielago-del-nino.png" alt="Mapa del archipiélago con las islas descubiertas por el niño">
+      <figcaption><b>Su archipiélago 🗺️.</b> Cada isla es un tema. Tocarla vuelve a esa conversación; hay buscador para encontrar una concreta.</figcaption>
+    </figure>
+  </div>
+
+  <p>Puede seguir preguntando sobre la misma lección: cada respuesta se encadena a la anterior y la conversación se conserva.</p>
+
+  <h3>Cuentos</h3>
+  <p><strong>📚 Mis cuentos</strong> genera un relato donde <strong>el niño es el protagonista</strong>, construido con los temas que ya ha explorado. <strong>Ningún cuento se publica sin tu aprobación</strong>: al crearlo, el niño ve <em>«¡Listo! Tus padres lo revisarán pronto»</em>.</p>
+</section>
+
+<!-- ===================== 6 ===================== -->
+<section class="sec">
+  <p class="overline">Apartado 6</p>
+  <h2>Lo que ves tú</h2>
+  <p class="lead">Panel de familia → <strong>📊 Ver el aprendizaje</strong>. No es una nota ni un ranking: es un mapa de por dónde anda su curiosidad.</p>
+
+  <div class="shots">
+    <figure>
+      <img src="capturas/e2-02-panel-familia-nora.png" alt="Panel de aprendizaje mostrando lo que domina y lo que está descubriendo">
+      <figcaption><b>Con actividad.</b> Lo que ya domina —retos acertados— y lo que está descubriendo.</figcaption>
+    </figure>
+    <figure>
+      <img src="capturas/e2-03-panel-familia-leo-sin-actividad.png" alt="Panel de aprendizaje de un explorador que aún no ha empezado">
+      <figcaption><b>Sin actividad todavía.</b> Un explorador recién creado lo dice claro, sin gráficas vacías.</figcaption>
+    </figure>
+  </div>
+
+  <h3>Cuentos por revisar</h3>
+  <figure class="narrow">
+    <img src="capturas/e2-12-aprobacion-parental-cuentos.png" alt="Panel de aprobación parental de cuentos con las acciones aprobar, editar y rechazar">
+    <figcaption><b>Aprobación parental.</b> Puedes <b>aprobarlo</b> —y aparece en su biblioteca—, <b>editarlo</b> antes de aprobarlo, o <b>rechazarlo</b>.</figcaption>
+  </figure>
+
+  <h3>Conectar otro dispositivo</h3>
+  <div class="shots">
+    <figure>
+      <img src="capturas/e2-11-conectar-movil-qr.png" alt="Pantalla con la dirección de la instalación y un código QR">
+      <figcaption><b>📱 Conectar otro dispositivo.</b> Escanea el QR con la tablet o el móvil del niño y entra directo, sin teclear direcciones.</figcaption>
+    </figure>
+    <figure class="phone">
+      <img src="capturas/e2-04-panel-familia-movil.png" alt="El panel de familia en la pantalla de un móvil">
+      <figcaption><b>En móvil.</b> Todo funciona igual en móvil, tablet y ordenador, con el diseño adaptado a cada pantalla.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ===================== 7 ===================== -->
+<section class="sec">
+  <p class="overline">Apartado 7</p>
+  <h2>Seguridad y privacidad</h2>
+  <p class="lead">Lo que Chispa hace por defecto, sin que tengas que configurar nada.</p>
+
+  <table>
+    <tr><th style="width:36%">Qué hace</th><th>Por qué importa</th></tr>
+    <tr><td><b>No pide datos del menor</b></td><td>Ni nombre real, ni foto, ni colegio. Un alias y una fecha de nacimiento, que solo sirve para ajustar el lenguaje</td></tr>
+    <tr><td><b>Tus datos son tuyos</b></td><td>Viven en la base de datos de tu instalación, no en un servicio ajeno</td></tr>
+    <tr><td><b>Claves de IA cifradas</b></td><td>Se guardan cifradas y nunca se devuelven, ni a ti</td></tr>
+    <tr><td><b>Se modera lo que escribe</b></td><td>Ante una entrada inapropiada responde <em>«Esta la vemos con un adulto»</em> 🛟 en lugar de generar contenido dudoso</td></tr>
+    <tr><td><b>Nunca ve un error técnico</b></td><td>Si un proveedor falla, la lección llega igual por otro camino</td></tr>
+    <tr><td><b>Límite de intentos</b></td><td>Tras varios fallos seguidos con la contraseña o el PIN, hace esperar unos minutos. Protege incluso de un hermano con paciencia</td></tr>
+  </table>
+
+  <div class="box warn">
+    <span class="t">La moderación se puede equivocar</span>
+    <p>Bloquea por lista de palabras, así que alguna curiosidad legítima puede caer. Si pasa, léela con él y reformuladla juntos.</p>
+  </div>
+</section>
+
+<!-- ===================== 8 ===================== -->
+<section class="sec">
+  <p class="overline">Apartado 8</p>
+  <h2>Cuando algo no va</h2>
+  <p class="lead">Los mensajes que puedes encontrarte, qué significan y qué hacer con cada uno.</p>
+
+  <table>
+    <tr><th style="width:30%">Lo que ves</th><th style="width:33%">Qué pasa</th><th>Qué hacer</th></tr>
+    <tr><td><b>«Esta la vemos con un adulto» 🛟</b></td><td>La moderación bloqueó la pregunta</td><td>Léela con él. Si era inocente, reformuladla</td></tr>
+    <tr><td><b>«Demasiados intentos. Espera un momento»</b></td><td>Demasiados fallos seguidos de contraseña o PIN</td><td>Esperar unos minutos. No es un bloqueo permanente</td></tr>
+    <tr><td><b>«Aquí no puedo escuchar»</b></td><td>La voz necesita conexión segura (https) y estás entrando por una dirección <code>http</code></td><td>Entra por el dominio con https, o escribe la pregunta</td></tr>
+    <tr><td><b>La lección no trae ilustración</b></td><td>El proveedor de imagen falló, está desactivado o no tiene clave</td><td>Revisa <b>⚙️ Configurar IA → Imágenes</b>. La lección funciona igual</td></tr>
+    <tr><td><b>Las lecciones parecen genéricas</b></td><td>Está en modo demo, sin IA real configurada</td><td>Configura un proveedor o una clave propia</td></tr>
+    <tr><td><b>Olvidaste la contraseña</b></td><td>—</td><td><b>Entrar → ¿Olvidaste tu contraseña?</b> y usa el código de recuperación</td></tr>
+    <tr><td><b>Perdiste código y contraseña</b></td><td>No hay recuperación posible, por diseño</td><td>Quien administre el servidor tendrá que intervenir en la base de datos</td></tr>
+  </table>
+
+  <h3>Detalles útiles</h3>
+  <ul>
+    <li><strong>Idioma</strong>: español e inglés, con el selector 🌐 de cada pantalla. Cambia toda la interfaz al instante.</li>
+    <li><strong>Sesión del adulto</strong>: dura 30 días en ese dispositivo. La del niño se cierra al salir.</li>
+    <li><strong>Cambiar tu contraseña</strong>: panel de familia → <strong>Cambiar contraseña</strong>. Pide la actual.</li>
+  </ul>
+
+  <div class="box tip" style="margin-top:8mm">
+    <span class="t">¿Buscas cómo instalarlo en tu propio servidor?</span>
+    <p>Eso no está aquí: este manual explica <b>cómo se usa</b>. La instalación y el despliegue están en <code>docs/MANUAL.md</code>.</p>
+  </div>
+</section>
+
+</body>
+</html>

@@ -147,7 +147,7 @@ export default function LessonScreen() {
               disabled={busy}
               style={{ flex: 1 }}
             />
-            <MicButton onText={setQuestion} disabled={busy} />
+            <MicButton onText={setQuestion} onAutoSubmit={(texto) => void ask(texto)} disabled={busy} />
             <button type="submit" className="btn-primary" disabled={busy || !question.trim()} style={{ width: "auto", padding: "0 16px", minHeight: 0 }}>
               🔎
             </button>

@@ -56,7 +56,7 @@ export default function Spark() {
             aria-label={t("spark.placeholder")}
             style={{ flex: 1 }}
           />
-          <MicButton onText={setCuriosity} disabled={busy} />
+          <MicButton onText={setCuriosity} onAutoSubmit={(texto) => void start(texto)} disabled={busy} />
         </div>
         {error && <p role="alert" style={{ color: "#fff", fontWeight: 700 }}>{error}</p>}
         <Button type="submit" disabled={busy}>

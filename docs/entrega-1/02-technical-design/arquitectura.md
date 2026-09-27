@@ -236,3 +236,4 @@ sequenceDiagram
 | [ADR-005](./adr/ADR-005-aprobacion-parental-cuentos.md) | Aprobación parental de cuentos (máquina de estados) |
 | [ADR-006](./adr/ADR-006-migraciones-aditivas.md) | Migraciones Alembic siempre aditivas |
 | [ADR-007](./adr/ADR-007-degradacion-elegante.md) | Degradación elegante transversal |
+| [ADR-008](./adr/ADR-008-rate-limiting-en-memoria-por-proceso.md) | Límite de intentos en memoria, por proceso *(añadida el 21-09-2026, durante la implementación)* |

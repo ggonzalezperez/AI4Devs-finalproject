@@ -52,7 +52,9 @@ Obtén primero los tokens reales, del tipo correcto:
 # Token de familia
 curl -s -X POST http://localhost:8000/auth/register \
   -H "Content-Type: application/json" \
-  -d '{"name":"Demo","email":"demo@chispa.test","password":"ChispaDemo2026!"}'
+  # OJO: nada de dominios .test/.local/.invalid. `email-validator` los rechaza por
+  # ser de uso reservado y el alta devuelve 422 en vez de un token.
+  -d '{"name":"Demo","email":"demo@example.com","password":"ChispaDemo2026!"}'
 
 # Token de niño (requiere token de familia)
 curl -s -X POST http://localhost:8000/children/1/login \

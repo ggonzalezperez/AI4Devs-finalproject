@@ -69,3 +69,49 @@ test("si el navegador deniega el micrófono, lo dice en lugar de callarse", asyn
 
   expect(await screen.findByRole("alert")).toHaveTextContent(/permiso/i);
 });
+
+test("en conexión insegura avisa de que no es un permiso, sin pedir permiso imposible", async () => {
+  const instancias = fakeRecognition();
+  vi.stubGlobal("isSecureContext", false);
+  render(
+    <I18nProvider initialLang="es">
+      <MicButton onText={() => {}} />
+    </I18nProvider>,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: /dictar la pregunta/i }));
+
+  // Ni siquiera se intenta arrancar: el navegador no va a pedir permiso.
+  expect(instancias).toHaveLength(0);
+  expect(await screen.findByRole("alert")).toHaveTextContent(/segura/i);
+});
+
+test("envía la pregunta al terminar el dictado, sin pulsar el botón de enviar", async () => {
+  const instancias = fakeRecognition();
+  const enviado: string[] = [];
+  render(
+    <I18nProvider initialLang="es">
+      <MicButton onText={() => {}} onAutoSubmit={(texto) => enviado.push(texto)} />
+    </I18nProvider>,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: /dictar la pregunta/i }));
+  instancias[0].onresult({ results: [[{ transcript: "por qué el mar es salado" }]] });
+
+  expect(enviado).toEqual(["por qué el mar es salado"]);
+});
+
+test("no envía nada si la transcripción viene vacía", async () => {
+  const instancias = fakeRecognition();
+  const enviado: string[] = [];
+  render(
+    <I18nProvider initialLang="es">
+      <MicButton onText={() => {}} onAutoSubmit={(texto) => enviado.push(texto)} />
+    </I18nProvider>,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: /dictar la pregunta/i }));
+  instancias[0].onresult({ results: [[{ transcript: "" }]] });
+
+  expect(enviado).toEqual([]);
+});

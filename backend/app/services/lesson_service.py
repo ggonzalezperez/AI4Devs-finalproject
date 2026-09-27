@@ -17,6 +17,9 @@ from app.services.moderation import check_curiosity
 _stub = StubLessonGenerator()
 
 
+_EXTENSIONES = {"image/webp": "webp", "image/jpeg": "jpg", "image/png": "png"}
+
+
 def _attach_image(db: Session, cfg, lesson: Lesson, age: int) -> None:
     gen = build_image_generator(cfg)
     try:
@@ -28,8 +31,12 @@ def _attach_image(db: Session, cfg, lesson: Lesson, age: int) -> None:
     try:
         media = Path(get_settings().media_dir) / "lessons"
         media.mkdir(parents=True, exist_ok=True)
-        (media / f"{lesson.id}.png").write_bytes(img.data)
-        lesson.image_url = f"/media/lessons/{lesson.id}.png"
+        # La extensión sigue al formato real. Antes se guardaba todo como .png,
+        # y con WebP eso deja ficheros que mienten sobre su contenido: el
+        # navegador lo resuelve, pero cualquier herramienta que mire el nombre no.
+        ext = _EXTENSIONES.get(img.mime, "png")
+        (media / f"{lesson.id}.{ext}").write_bytes(img.data)
+        lesson.image_url = f"/media/lessons/{lesson.id}.{ext}"
         db.commit()
     except Exception:
         db.rollback()

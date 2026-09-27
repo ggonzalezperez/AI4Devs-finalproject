@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import { childLogin } from "../api/children";
-import { setChildToken } from "../api/client";
+import { ApiError, setChildToken } from "../api/client";
 import { useI18n } from "../i18n/I18nContext";
 import { Avatar } from "../components/avatars";
 import ScreenCard from "../components/ScreenCard";
@@ -22,8 +22,10 @@ export default function ChildAccess() {
           setChildToken(res.access_token);
           navigate("/jugar");
         })
-        .catch(() => {
-          setError(t("childAccess.error"));
+        .catch((err) => {
+          // El niño no ve jerga de seguridad: si toca esperar, se le dice así.
+          const esperar = err instanceof ApiError && err.status === 429;
+          setError(t(esperar ? "childAccess.tooMany" : "childAccess.error"));
           setPin("");
         });
     }

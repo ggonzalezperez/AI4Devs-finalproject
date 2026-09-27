@@ -10,6 +10,18 @@ const projectRoot = fileURLToPath(new URL("..", import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
+  // En producción es nginx quien enruta /api al backend. En `npm run dev` no hay
+  // nginx, así que el servidor de Vite hace el mismo papel: sin esto, el cliente
+  // pediría /api/... al propio Vite y recibiría el index.html del SPA.
+  server: {
+    proxy: {
+      "/api": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        rewrite: (ruta) => ruta.replace(/^\/api/, ""),
+      },
+    },
+  },
   test: {
     globals: true,
     environment: "jsdom",

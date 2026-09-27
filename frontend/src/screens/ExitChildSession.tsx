@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { verifyFamilyPassword } from "../api/auth";
-import { setChildToken } from "../api/client";
+import { ApiError, setChildToken } from "../api/client";
 import { useI18n } from "../i18n/I18nContext";
 import Button from "../components/Button";
 import ScreenCard from "../components/ScreenCard";
@@ -29,8 +29,9 @@ export default function ExitChildSession() {
       // Solo se cierra la sesión del NIÑO; la de familia sigue viva.
       setChildToken(null);
       navigate("/familia/explorar", { replace: true });
-    } catch {
-      setError(t("exit.wrong"));
+    } catch (err) {
+      const esperar = err instanceof ApiError && err.status === 429;
+      setError(t(esperar ? "error.tooManyAttempts" : "exit.wrong"));
     } finally {
       setBusy(false);
     }

@@ -26,17 +26,18 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-function mockFetch() {
+function mockFetch(configOverrides: Partial<typeof CONFIG> = {}) {
   const put = vi.fn();
+  const config = { ...CONFIG, ...configOverrides };
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       if (init?.method === "PUT") {
         put(JSON.parse(String(init.body)));
-        return new Response(JSON.stringify({ ...CONFIG, tier: "byok", provider: "claude", has_api_key: true }), { status: 200 });
+        return new Response(JSON.stringify({ ...config, tier: "byok", provider: "claude", has_api_key: true }), { status: 200 });
       }
       if (String(url).includes("/catalog")) return new Response(JSON.stringify(CATALOG), { status: 200 });
-      return new Response(JSON.stringify(CONFIG), { status: 200 });
+      return new Response(JSON.stringify(config), { status: 200 });
     }),
   );
   return put;
@@ -71,4 +72,34 @@ test("shows image config section", async () => {
   mockFetch();
   setup();
   expect(await screen.findByText(/Imágenes en las lecciones/i)).toBeInTheDocument();
+});
+
+test("avisa al abrir una configuración con proveedor de imagen y las imágenes apagadas", async () => {
+  // El fallo que esto cierra: se podía guardar proveedor y clave con la casilla
+  // desactivada y el panel no decía nada, así que la familia creía tener
+  // ilustraciones y las lecciones salían sin ninguna. Al derivarse del render y no
+  // del guardado, el aviso aparece también al ABRIR el panel, que es el caso en el
+  // que el fallo llevaba invisible desde el 15-09.
+  mockFetch({ image_provider: "huggingface", has_image_api_key: true, image_enabled: false });
+  setup();
+  const aviso = await screen.findByRole("status");
+  expect(aviso).toHaveTextContent(/imágenes están desactivadas/i);
+  // Y no filtra la clave: solo dice que hay una guardada.
+  expect(aviso.textContent).not.toMatch(/hf_|sk-/);
+});
+
+test("no avisa en el estado por defecto ni con las imágenes activadas", async () => {
+  // Sin este caso el aviso saldría a TODAS las familias: el estado por defecto es
+  // precisamente proveedor «none» con las imágenes apagadas (RF-PLT-03), y un aviso
+  // que sale siempre es ruido que se aprende a ignorar.
+  mockFetch();
+  setup();
+  expect(await screen.findByText(/Imágenes en las lecciones/i)).toBeInTheDocument();
+  expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+  // Y con proveedor elegido y las imágenes activadas tampoco: no hay nada que avisar.
+  vi.restoreAllMocks();
+  mockFetch({ image_provider: "huggingface", image_enabled: true });
+  setup();
+  await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
 });

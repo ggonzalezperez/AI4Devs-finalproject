@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     database_url: str = "sqlite+pysqlite:///./chispa.db"
     cors_origins: str = "http://localhost:5173"
     ai_config_key: str | None = None
+    # Palabra secreta que exige el alta de familia. Sin definir, el registro
+    # queda abierto: es lo que quiere quien despliega Chispa en su casa. Se
+    # define solo en despliegues expuestos a internet.
+    invite_code: str | None = None
+    # Cabecera de la que fiarse para saber la IP real del cliente. Sin definir
+    # no se cree ninguna: detrás de un proxy hay que declararlo a propósito, y
+    # con el backend expuesto directo se falsificaría en un segundo. En el
+    # despliegue tras el túnel de Cloudflare: CF-Connecting-IP.
+    client_ip_header: str | None = None
+    rate_limit_enabled: bool = True
     media_dir: str = "media"
     image_timeout: float = 60.0
 

@@ -20,14 +20,23 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       AI_CONFIG_KEY: ${AI_CONFIG_KEY}
       ENVIRONMENT: production
-      # Por defecto solo localhost. Para acceso desde la red de casa (móvil/tablet),
-      # pon en .env: CORS_ORIGINS=http://localhost:5173,http://<IP-DEL-PC>:5173
+      # Con el frontend sirviendo la API bajo /api, el navegador ya no hace
+      # peticiones entre orígenes y CORS deja de intervenir. Se conserva para
+      # quien ataque el backend directamente por el puerto 8000 (depuración,
+      # `npm run dev` sin proxy).
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      # Acceso de la demo pública: sin INVITE_CODE el registro queda abierto, y
+      # sin CLIENT_IP_HEADER el límite de intentos no se cree ninguna cabecera.
+      INVITE_CODE: ${INVITE_CODE:-}
+      CLIENT_IP_HEADER: ${CLIENT_IP_HEADER:-}
     depends_on:
       postgres:
         condition: service_healthy
     ports:
-      - "8000:8000"
+      # Solo local: el frontend alcanza al backend por la red interna de Docker.
+      # Publicarlo en la LAN permitiría falsificar la cabecera de IP del cliente
+      # y esquivar el límite de intentos por IP.
+      - "127.0.0.1:8000:8000"
     volumes:
       # Las imágenes generadas viven en MEDIA_DIR y la BD guarda su ruta. Sin
       # este volumen el directorio muere con el contenedor: cada reconstrucción
@@ -39,11 +48,17 @@ services:
     build:
       context: ./frontend
       args:
-        # Por defecto localhost. Para la red de casa, pon en .env:
-        # VITE_API_URL=http://<IP-DEL-PC>:8000  (debe coincidir con CORS_ORIGINS)
-        VITE_API_URL: ${VITE_API_URL:-http://localhost:8000}
+        # Vacío = mismo origen: el cliente pide /api y nginx lo enruta al backend.
+        # Solo se define para apuntar a un backend ajeno; ponerle un host aquí
+        # vuelve a atar el bundle a una máquina y rompe el acceso por https.
+        VITE_API_URL: ${VITE_API_URL:-}
     ports:
       - "5173:80"
+      - "5443:443"
+    volumes:
+      # Certificado de la CA local para servir https en la red de casa. El micrófono
+      # (Web Speech API) solo funciona en contexto seguro, y http por IP no lo es.
+      - ./certs:/etc/nginx/certs:ro
     depends_on:
       - backend
 

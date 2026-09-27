@@ -164,3 +164,157 @@ exactas— y verificado en ambas direcciones.
 
 Queda anotada una limitación del método: la revisión la hizo la misma sesión que implementó, no una
 independiente como pide el estándar.
+
+---
+
+# Verificación — Endurecimiento del acceso (21-09-2026)
+
+> Salidas obtenidas ejecutando los comandos el 21 de septiembre de 2026, tras publicar la aplicación
+> en internet. Contexto en [demo pública](demo-publica.md).
+
+## 7. Suites tras el cambio
+
+```
+$ cd backend && python -m pytest -q
+179 passed, 1 warning in 36.40s
+
+$ cd backend && ruff check .
+All checks passed!
+
+$ cd frontend && npx vitest run
+ Test Files  32 passed (32)
+      Tests  73 passed (73)
+
+$ cd frontend && npm run lint      # tsc --noEmit
+(sin salida: sin errores)
+```
+
+Evolución: backend **144 → 179** (+35), frontend **67 → 73** (+6, incluida la primera cobertura de
+la pantalla de login, que no tenía ninguna).
+
+| Fichero nuevo | Tests | Qué sujeta |
+|---|---|---|
+| `backend/tests/test_invite_code.py` | 8 | Registro abierto sin configurar · 403 con código erróneo o ausente · ningún usuario creado al rechazar · el mensaje no revela el código |
+| `backend/tests/test_rate_limit.py` | 9 | Ventana deslizante con reloj falso · `Retry-After` decreciente · aislamiento de claves · **20 hilos concurrentes aceptan exactamente el límite** · desalojo por tope de memoria |
+| `backend/tests/test_client_ip.py` | 6 | **Cabecera falsificada ignorada si no hay proxy declarado** · lectura de la cabecera configurada · cadena `X-Forwarded-For` · valor que no es IP |
+| `backend/tests/test_rate_limit_api.py` | 12 | 429 por IP y por cuenta · el login correcto olvida su cubo · un hermano no bloquea al otro · **JSON malformado sigue devolviendo 422** |
+
+## 8. Humo contra el despliegue real
+
+Ejecutado dentro de la VM contra el origen de la aplicación (`http://localhost:5173/api`), que es el
+mismo camino que recorre el navegador tras el túnel.
+
+```
+--- registro SIN codigo ---
+403
+--- registro con codigo MALO ---
+{"detail":"Código de invitación no válido"}
+403
+--- registro con codigo BUENO ---
+201
+--- 11 logins fallidos ---
+401 401 401 401 401 429 429 429 429 429 429
+--- cabeceras del corte ---
+HTTP/1.1 429 Too Many Requests
+retry-after: 898
+```
+
+El corte llega al **sexto** intento, no al undécimo: el cubo por cuenta (5) se agota antes que el de
+IP (10), que es exactamente el comportamiento buscado contra quien ataca una cuenta concreta.
+
+Los usuarios creados en esta prueba se borraron después; la base de datos de la demo queda como
+estaba.
+
+## 9. Cloudflare Access
+
+```
+$ curl -s -o /dev/null -w "%{http_code} -> %{redirect_url}\n" https://chispa.chispalearn.com/
+302 -> https://small-sky-a744.cloudflareaccess.com/cdn-cgi/access/login/chispa.chispalearn.com?...
+
+$ curl -s -o /dev/null -w "%{http_code}\n" https://chispa.chispalearn.com/api/health
+302
+```
+
+Access protege **todas** las rutas, incluida la API: sin sesión, la petición no llega al backend.
+Antes de activarlo, esas mismas dos llamadas devolvían `200` y `{"status":"ok"}`.
+
+## 10. Uso real de la demo publicada (21-09-2026, noche)
+
+Primera sesión de uso completo desde un móvil, por el dominio público. Sirvió para medir dos cosas
+que hasta entonces eran suposiciones, y para encontrar tres fallos que ninguna suite habría visto
+(ver [AI-LOG-011](../entrega-1/05-ai-log/decisiones.md)).
+
+**El corte de 100 segundos de Cloudflare ya no es un riesgo abierto.** Con el tiempo de respuesta
+añadido al registro de nginx:
+
+```
+POST /api/lessons  ->  201 en 18.139s (upstream 18.137s)
+```
+
+Cinco veces por debajo del límite del borde. El dato es de una lección con ilustración generada por
+OpenAI, que es el caso más lento.
+
+**Peso de las ilustraciones**, antes y después de pedirlas en WebP:
+
+```
+$ ls -lh /app/media/lessons/   # antes
+2.5M 3.png   2.4M 4.png   2.1M 5.png   2.4M 6.png   2.2M 7.png   2.9M 8.png
+
+$ ls -lh /app/media/lessons/   # después, generada ya en WebP
+74K 11.webp
+
+$ du -sh /app/media/lessons    # tras convertir las ocho anteriores
+2.0M        (eran 19M)
+```
+
+**Humo del alta con código de invitación**, contra el origen real:
+
+```
+alta sin código    -> 403
+alta con el código -> 201
+```
+
+## 11. Suites tras el trabajo de imágenes y documentación (22-09-2026)
+
+```
+$ cd backend && python -m pytest -q
+182 passed, 1 warning in 38.63s
+
+$ cd backend && ruff check .
+All checks passed!
+
+$ cd frontend && npx vitest run
+ Test Files  32 passed (32)
+      Tests  74 passed (74)
+
+$ cd frontend && npm run lint      # tsc --noEmit
+(sin salida: sin errores)
+```
+
+Evolución completa de la entrega: backend **108 → 144 → 179 → 182**, frontend **48 → 60 → 73 → 74**.
+
+Las tres pruebas nuevas cubren los fallos que solo aparecían en producción y la optimización de
+imagen: que una `VITE_API_URL` vacía siga cayendo en `/api`, que a OpenAI se le pidan WebP
+comprimido y calidad media, y que el fichero se guarde con la extensión de su formato real.
+
+**Las ilustraciones se sirven correctamente** (comprobado contra el despliegue, tras convertir las
+antiguas):
+
+```
+$ curl -sI http://localhost:5173/api/media/lessons/11.webp
+HTTP/1.1 200 OK
+Content-Type: image/webp
+Content-Length: 75730
+Cache-Control: public, max-age=31536000, immutable
+```
+
+El tipo MIME correcto importa: antes salían como `application/octet-stream` porque la imagen base
+del contenedor no conoce la extensión `.webp`.
+
+## 12. Lo que estas pruebas no cubren
+- El límite se ejercita con el limitador en su configuración real, pero **no se ha probado bajo carga
+  concurrente contra el despliegue**, solo en el test de 20 hilos del contador.
+- **Un solo recorrido de usuario real**, hecho por el propio autor. No hay pruebas con un niño ni con
+  un evaluador externo.
+- La conversión de las ilustraciones antiguas se verificó **abriendo las lecciones**, no comparando
+  las imágenes píxel a píxel.

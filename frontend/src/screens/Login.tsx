@@ -28,7 +28,8 @@ export default function Login() {
       login(access_token);
       navigate("/familia");
     } catch (err) {
-      setError(err instanceof ApiError ? t("login.error") : t("login.errorGeneric"));
+      if (err instanceof ApiError && err.status === 429) setError(t("error.tooManyAttempts"));
+      else setError(err instanceof ApiError ? t("login.error") : t("login.errorGeneric"));
     } finally {
       setBusy(false);
     }

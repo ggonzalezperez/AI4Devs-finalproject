@@ -57,6 +57,38 @@ test("shows error when passwords do not match", async () => {
   expect(await screen.findByText(/no coinciden/i)).toBeInTheDocument();
 });
 
+test("sends the invite code when the field is filled", async () => {
+  const fetchMock = vi.fn(
+    async (_url: string, _init?: RequestInit) =>
+      new Response(
+        JSON.stringify({ access_token: "t1", token_type: "bearer", recovery_code: "CODE" }),
+        { status: 201 },
+      ),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  setup();
+  await fillForm();
+  await userEvent.type(screen.getByLabelText(/código de invitación/i), "palabra-secreta");
+  await userEvent.click(screen.getByRole("button", { name: /crear cuenta/i }));
+  await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+  const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+  expect(body.invite_code).toBe("palabra-secreta");
+});
+
+test("shows the server message when the invite code is rejected", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ detail: "Código de invitación no válido" }), { status: 403 }),
+    ),
+  );
+  setup();
+  await fillForm();
+  await userEvent.click(screen.getByRole("button", { name: /crear cuenta/i }));
+  expect(await screen.findByText(/código de invitación no válido/i)).toBeInTheDocument();
+});
+
 test("shows error message when email already exists", async () => {
   vi.stubGlobal(
     "fetch",

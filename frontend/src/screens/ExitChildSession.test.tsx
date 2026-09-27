@@ -45,3 +45,24 @@ test("con la contraseña incorrecta NO cierra la sesión del niño", async () =>
   expect(await screen.findByRole("alert")).toHaveTextContent(/incorrecta/i);
   expect(getChildToken()).toBe("child-tok");
 });
+
+test("avisa de que hay que esperar cuando el servidor responde 429", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ detail: "Demasiados intentos." }), {
+          status: 429,
+          headers: { "Retry-After": "60" },
+        }),
+    ),
+  );
+  pantalla();
+
+  fireEvent.change(screen.getByLabelText(/contraseña/i), { target: { value: "loquesea" } });
+  fireEvent.click(screen.getByRole("button", { name: /salir/i }));
+
+  // No es que la contraseña esté mal: es que ni se ha comprobado.
+  expect(await screen.findByText(/demasiados intentos/i)).toBeInTheDocument();
+  await waitFor(() => expect(getChildToken()).toBe("child-tok"));
+});

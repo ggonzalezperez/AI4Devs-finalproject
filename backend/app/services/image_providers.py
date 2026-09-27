@@ -92,13 +92,37 @@ class OpenAIImageGenerator:
         resp = httpx.post(
             "https://api.openai.com/v1/images/generations",
             headers={"Authorization": f"Bearer {self.api_key}"},
-            json={"model": self.model, "prompt": prompt, "size": "1024x1024", "n": 1},
+            json={
+                "model": self.model,
+                "prompt": prompt,
+                # 1024x1024 se ve nítido en móvil, tablet y portátil: la lección
+                # la muestra a menos de 700 px de ancho.
+                "size": "1024x1024",
+                "n": 1,
+                # Sin estos tres, el modelo devuelve PNG a máxima calidad: 2-3 MB
+                # por ilustración viajando al móvil del niño en cada lección.
+                # WebP al 80 % baja a cientos de kilobytes sin diferencia visible.
+                "output_format": "webp",
+                "output_compression": 80,
+                "quality": "medium",
+                # NO añadir `response_format`: existe solo para dall-e-2 y dall-e-3.
+                # La familia gpt-image-* —la única del catálogo— devuelve SIEMPRE
+                # b64_json y RECHAZA el parámetro con «Unknown parameter», así que
+                # enviarlo convertiría este adaptador en un 400 que el best-effort
+                # del lesson_service absorbería en silencio. Si algún día entra un
+                # dall-e-* en el catálogo, entonces sí es obligatorio, y estos tres
+                # de arriba dejan de valer. Lo vigila
+                # test_openai_does_not_send_response_format.
+            },
             timeout=_timeout(),
             follow_redirects=False,
         )
         resp.raise_for_status()
-        b64 = resp.json()["data"][0]["b64_json"]
-        return GeneratedImage(data=base64.b64decode(b64), mime="image/png")
+        data = resp.json().get("data") or []
+        b64 = data[0].get("b64_json") if data else None
+        if not b64:
+            return None
+        return GeneratedImage(data=base64.b64decode(b64), mime="image/webp")
 
 
 class GeminiImageGenerator:

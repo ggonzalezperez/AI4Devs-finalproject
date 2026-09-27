@@ -37,9 +37,17 @@ const MENSAJE_POR_ERROR: Record<string, string> = {
 
 export default function MicButton({
   onText,
+  onAutoSubmit,
   disabled,
 }: {
   onText: (text: string) => void;
+  /**
+   * Si viene, la pregunta se envía sola al terminar el dictado: el niño habla y
+   * Chispa responde, sin el segundo paso de buscar el botón de enviar. Recibe el
+   * texto por parámetro a propósito — el estado de React aún no se ha actualizado
+   * cuando esto corre, así que leerlo daría la transcripción anterior.
+   */
+  onAutoSubmit?: (text: string) => void;
   disabled?: boolean;
 }) {
   const { t, lang } = useI18n();
@@ -56,13 +64,23 @@ export default function MicButton({
       return;
     }
     setError("");
+    // La Web Speech API solo vive en contexto seguro. Servida por IP de la red
+    // local (http://192.168.x.x) el navegador rechaza sin llegar a preguntar,
+    // y el error que llega es "not-allowed": pedirle permiso al usuario era
+    // mandarle a un botón que nadie le va a enseñar.
+    if (window.isSecureContext === false) {
+      setError(t("mic.insecure"));
+      return;
+    }
     const rec = new Ctor!();
     rec.lang = lang === "en" ? "en-US" : "es-ES";
     rec.continuous = false;
     rec.interimResults = false;
     rec.onresult = (e) => {
       const text = e.results?.[0]?.[0]?.transcript ?? "";
-      if (text) onText(text);
+      if (!text) return;
+      onText(text);
+      onAutoSubmit?.(text);
     };
     rec.onend = () => setListening(false);
     rec.onerror = (e) => {

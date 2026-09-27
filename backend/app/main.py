@@ -1,3 +1,4 @@
+import mimetypes
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -22,6 +23,11 @@ app.include_router(lessons.router)
 app.include_router(me.router)
 app.include_router(ai_config.router)
 app.include_router(stories.router)
+
+# La imagen base del contenedor no trae .webp en su tabla de tipos, así que las
+# ilustraciones salían como application/octet-stream. El navegador las deduce,
+# pero una descarga guardaría un fichero sin tipo.
+mimetypes.add_type("image/webp", ".webp")
 
 _media_root = Path(get_settings().media_dir)
 (_media_root / "lessons").mkdir(parents=True, exist_ok=True)

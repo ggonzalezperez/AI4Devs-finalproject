@@ -8,8 +8,10 @@ from sqlalchemy.pool import StaticPool
 # Nota: usar `from app import models` (no `import app.models`) para no
 # sobrescribir el nombre `app` (la instancia FastAPI importada arriba).
 from app import models  # noqa: F401
+from app.config import get_settings
 from app.database import Base, get_db
 from app.main import app
+from app.services import rate_limit
 
 test_engine = create_engine(
     "sqlite+pysqlite:///:memory:",
@@ -17,6 +19,32 @@ test_engine = create_engine(
     poolclass=StaticPool,
 )
 TestSessionLocal = sessionmaker(bind=test_engine, autoflush=False, autocommit=False)
+
+
+@pytest.fixture(autouse=True)
+def _contadores_limpios():
+    """El limitador guarda estado de proceso y los tests comparten proceso.
+
+    Sin esto, los intentos se acumularían de un test a otro y la suite empezaría
+    a fallar según el orden de ejecución. El `TestClient` además presenta
+    siempre el mismo peer, así que todos caen en el mismo cubo.
+    """
+    rate_limit.limitador.limpiar()
+    yield
+    rate_limit.limitador.limpiar()
+
+
+@pytest.fixture(autouse=True)
+def _ajustes_neutros(monkeypatch):
+    """Aísla la suite del `.env` de quien la ejecuta.
+
+    `Settings` lee `.env`: en cuanto el `.env` local defina INVITE_CODE para
+    probar el despliegue, los tests fallarían en esa máquina y pasarían en CI.
+    """
+    ajustes = get_settings()
+    monkeypatch.setattr(ajustes, "invite_code", None)
+    monkeypatch.setattr(ajustes, "rate_limit_enabled", True)
+    monkeypatch.setattr(ajustes, "client_ip_header", None)
 
 
 @pytest.fixture

@@ -1,4 +1,7 @@
-# Chispa — Manual de instalación y uso
+# Chispa — Manual de instalación
+
+Cómo poner Chispa en marcha en tu propia máquina. Para aprender a **usarla** —crear la familia,
+añadir exploradores, revisar cuentos— está el [manual de uso](manual-usuario.md).
 
 ## Requisitos
 - Docker y Docker Compose.
@@ -16,8 +19,11 @@ docker compose run --rm backend python -c "from app.services.crypto import gener
 ```bash
 docker compose up --build -d
 ```
-- Frontend: http://localhost:5173
-- API: http://localhost:8000 (docs en /docs)
+- Frontend: http://localhost:5173 (y https://localhost:5443 si has generado los certificados)
+- API: bajo el mismo origen, en `/api` (por ejemplo http://localhost:5173/api/health)
+- API directa, para depurar: http://localhost:8000 (docs en /docs). Solo desde la propia
+  máquina: el puerto está atado a `127.0.0.1` a propósito, porque exponerlo en la red local
+  permitiría falsificar la cabecera de IP en la que se apoya el límite de intentos.
 
 ## 3. Elegir cómo se genera la IA (panel de padres → "⚙️ Configurar IA")
 Tres niveles:
@@ -53,6 +59,26 @@ docker compose down -v       # parar y borrar datos
 > lecciones conservarían la ruta de una imagen que ya no existe; la app lo tolera y
 > simplemente no la muestra. Para parar sin perder nada, usa `down` a secas.
 
+## 6. Exponer la instalación fuera de casa (opcional)
+
+Si publicas Chispa en internet, dos variables más en el `.env`:
+
+| Variable | Para qué |
+|---|---|
+| `INVITE_CODE` | Cierra el alta de familias: quien no tenga la palabra recibe un 403. Sin definir, el registro queda abierto, que es lo normal en una instalación doméstica. **Es un secreto único y compartido, no una invitación por persona:** sirve infinitas veces, no caduca, y la única forma de revocarlo es cambiar la variable, lo que lo invalida para todos a la vez |
+| `CLIENT_IP_HEADER` | Cabecera de la que fiarse para conocer la IP real de quien llama, que usa el límite de intentos. **Solo** si hay un proxy de confianza delante: tras un túnel de Cloudflare es `CF-Connecting-IP`. Sin definir no se cree ninguna cabecera |
+
+Hay un caso real documentado paso a paso —dominio, túnel, control de acceso y endurecimiento de
+la máquina— en [la demo pública](entrega-2/demo-publica.md).
+
+> ⚠️ **No pongas `VITE_API_URL`** si publicas la app en un dominio. Esa variable hornea la
+> dirección del backend dentro del bundle y ata la aplicación a una máquina concreta: deja de
+> funcionar por https y el navegador bloquea las llamadas. Solo sirve para apuntar a un backend
+> ajeno a propósito.
+
 ## Seguridad
 - Las API keys de las familias se guardan **cifradas** (Fernet, `AI_CONFIG_KEY`). Nunca se devuelven por la API.
 - Los datos viven en el Postgres del stack de la familia (auto-alojable).
+- Los flujos de credenciales (alta, entrada, recuperación, PIN del niño y confirmación del adulto)
+  tienen **límite de intentos** por IP y por cuenta; al superarlo responden 429. Se puede desactivar
+  con `RATE_LIMIT_ENABLED=false`, pero solo tiene sentido para depurar.

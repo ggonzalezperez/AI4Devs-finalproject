@@ -3,10 +3,17 @@ import { apiFetch } from "./client";
 export type TokenResponse = { access_token: string; token_type: string };
 export type RegisterResult = TokenResponse & { recovery_code: string };
 
-export function registerFamily(name: string, email: string, password: string) {
+export function registerFamily(
+  name: string,
+  email: string,
+  password: string,
+  inviteCode?: string,
+) {
   return apiFetch<RegisterResult>("/auth/register", {
     method: "POST",
-    body: { name, email, password },
+    // El campo solo viaja si tiene valor: en un despliegue casero el servidor
+    // no exige invitación y el cuerpo debe seguir siendo el de siempre.
+    body: { name, email, password, ...(inviteCode ? { invite_code: inviteCode } : {}) },
   });
 }
 

@@ -32,3 +32,30 @@ test("typing 4 digits logs the child in and stores token", async () => {
   }
   await waitFor(() => expect(localStorage.getItem("chispa_child_token")).toBe("child-tok"));
 });
+
+test("shows a kind waiting message when the PIN endpoint answers 429", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(
+      async () =>
+        new Response(JSON.stringify({ detail: "Demasiados intentos." }), {
+          status: 429,
+          headers: { "Retry-After": "60" },
+        }),
+    ),
+  );
+  render(
+    <I18nProvider initialLang="es">
+      <MemoryRouter initialEntries={["/explorar/1"]}>
+        <Routes>
+          <Route path="/explorar/:childId" element={<ChildAccess />} />
+        </Routes>
+      </MemoryRouter>
+    </I18nProvider>,
+  );
+  for (const d of ["1", "2", "3", "4"]) {
+    await userEvent.click(screen.getByRole("button", { name: d }));
+  }
+  // Nada de jerga de seguridad: el niño solo entiende que toca esperar.
+  expect(await screen.findByText(/espera un poquito/i)).toBeInTheDocument();
+});

@@ -72,6 +72,18 @@ def put_config(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Proveedor no disponible",
         )
+    # El de imagen se valida igual que el de texto. Sin esto, un id que no está en
+    # el catálogo se guardaba con 200, `build_image_generator` no lo reconocía y
+    # devolvía el stub: la familia creía tener ilustraciones y no salía ninguna.
+    # RF-IA-06 declara la lista cerrada como regla de negocio.
+    image_provider = next(
+        (p for p in ai_catalog.IMAGE_PROVIDERS if p["id"] == payload.image_provider), None
+    )
+    if image_provider is None or not image_provider["enabled"]:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Proveedor de imagen no disponible",
+        )
     cfg = ai_config_repo.get_or_create(db, user.family_id)
     cfg.tier = payload.tier
     cfg.provider = payload.provider

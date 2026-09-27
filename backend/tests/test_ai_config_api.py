@@ -102,3 +102,53 @@ def test_catalog_includes_image_providers(client):
     ids = [p["id"] for p in body["image_providers"]]
     assert len(ids) > 0
     assert "huggingface" in ids
+
+
+def test_put_rejects_an_unknown_image_provider(client):
+    """Un proveedor de imagen inventado se guardaba con 200 y no generaba nada.
+
+    El proveedor de texto sí se valida contra el catálogo; el de imagen no, así que
+    `build_image_generator` no lo reconocía y devolvía el stub. Resultado: la familia
+    creía tener ilustraciones y las lecciones salían sin imagen, sin ningún aviso.
+    RF-IA-06 declara la lista cerrada como regla de negocio.
+    """
+    h = _auth(client)
+    r = client.put(
+        "/family/ai-config",
+        headers=h,
+        json={
+            "tier": "free",
+            "provider": "stub",
+            "image_provider": "midjourney",
+            "image_enabled": True,
+        },
+    )
+    assert r.status_code == 422
+    assert "imagen" in r.json()["detail"].lower()
+    # Y el rechazo no deja escrito a medias: sigue en el valor por defecto.
+    assert client.get("/family/ai-config", headers=h).json()["image_provider"] == "none"
+
+
+def test_put_accepts_every_image_provider_in_the_catalog(client):
+    """La validación nueva no puede dejar fuera a ninguno de los del catálogo.
+
+    Si el catálogo y la validación se separan, el panel ofrece en su desplegable
+    proveedores que el servidor rechaza con 422: el fallo opuesto, igual de tonto.
+    """
+    h = _auth(client)
+    catalog = client.get("/family/ai-config/catalog", headers=h).json()
+    ofrecidos = [p for p in catalog["image_providers"] if p["enabled"]]
+    assert ofrecidos, "el catálogo de imagen no ofrece ningún proveedor"
+    for provider in ofrecidos:
+        r = client.put(
+            "/family/ai-config",
+            headers=h,
+            json={
+                "tier": "free",
+                "provider": "stub",
+                "image_provider": provider["id"],
+                "image_enabled": False,
+            },
+        )
+        assert r.status_code == 200, f"el catálogo ofrece {provider['id']} y el servidor lo rechaza"
+        assert r.json()["image_provider"] == provider["id"]

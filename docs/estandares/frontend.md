@@ -42,8 +42,13 @@ más caro del frontend:
 - Los errores llegan como `ApiError` con `status` y mensaje. Las pantallas deciden qué mostrar.
 - Un módulo por área en `api/` (`auth.ts`, `children.ts`, `nucleo.ts`, `stories.ts`,
   `aiConfig.ts`), con tipos exportados junto a la función que los devuelve.
-- La URL base sale de `VITE_API_URL`, con `http://localhost:8000` por defecto. Nunca una URL
-  escrita a mano en una pantalla: rompería el acceso por LAN.
+- La URL base es **`/api` en el mismo origen** por defecto: el frontend enruta la API, así que la
+  misma imagen vale por localhost, por IP o por dominio sin reconstruir. `VITE_API_URL` solo se
+  define para apuntar a un backend ajeno; ponerle un host ata el bundle a una máquina y rompe el
+  acceso por https. Ojo al leerla: viene como cadena **vacía** cuando no se define, así que hay que
+  tratar el vacío y no solo `undefined`. Nunca una URL escrita a mano en una pantalla.
+- Los errores del servidor llegan como `ApiError` con `status`, mensaje y, en un 429, los segundos
+  de `retryAfter`.
 
 ## 4. Textos e i18n
 

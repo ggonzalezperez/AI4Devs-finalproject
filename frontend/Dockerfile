@@ -3,7 +3,10 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
-ARG VITE_API_URL=http://localhost:8000
+# Vacío a propósito: el cliente cae a /api (mismo origen, enrutado por nginx).
+# Definirlo vuelve a atar el bundle a un host concreto; solo tiene sentido para
+# apuntar a un backend ajeno.
+ARG VITE_API_URL=
 ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
