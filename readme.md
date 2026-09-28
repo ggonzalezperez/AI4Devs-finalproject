@@ -90,6 +90,27 @@ aplicación funciona entera en modo demo, por diseño (`ADR-001`). Ver §1.4.
 - **Entregas anteriores:** ramas `feature-entrega1-GGP` y `feature-entrega2-GGP` del mismo
   repositorio, conservadas como evidencia histórica.
 
+#### Cómo navegar este repositorio
+
+Este documento es el resumen; el detalle está en `docs/`. Por dónde empezar según qué se busque:
+
+| Si buscas… | Ve a |
+|---|---|
+| **Probar la aplicación** | [`docs/entrega-3/acceso-revisores.md`](docs/entrega-3/acceso-revisores.md) — las dos puertas, el recorrido sugerido y qué **no** es un fallo |
+| **Ver el producto terminado** | [`docs/Chispa-Manual-de-uso.pdf`](docs/Chispa-Manual-de-uso.pdf) — 18 páginas con guía de pantallas y 17 capturas |
+| **El diseño y las decisiones** | [`docs/entrega-1/`](docs/entrega-1/README.md) — producto, historias, arquitectura, modelo de datos, contratos de API y **8 ADR** |
+| **Qué está construido y qué no** | [`docs/entrega-2/estado-implementacion.md`](docs/entrega-2/estado-implementacion.md) — historia por historia, y la **tabla de deuda conocida** |
+| **Las pruebas, con salidas reales** | [`docs/entrega-2/verificacion.md`](docs/entrega-2/verificacion.md) y los informes de [`.superpowers/sdd/reports/`](.superpowers/sdd/reports/) |
+| **Cómo se usó la IA** | [`prompts.md`](prompts.md), [`docs/entrega-1/05-ai-log/decisiones.md`](docs/entrega-1/05-ai-log/decisiones.md) y [`docs/entrega-3/herramientas-ia.md`](docs/entrega-3/herramientas-ia.md) |
+| **El proceso real, tarea a tarea** | [`.superpowers/sdd/`](.superpowers/sdd/INDEX.md) — **56 briefs y 54 informes**, uno por tarea |
+| **Cómo instalarlo** | [`docs/MANUAL.md`](docs/MANUAL.md), o §1.4 de este documento para la versión corta |
+
+> **Los dos documentos más incómodos, y por eso los más útiles:**
+> [`decisiones.md`](docs/entrega-1/05-ai-log/decisiones.md) recoge los **errores del modelo** que se
+> detectaron y corrigieron —una bitácora donde la IA nunca se equivoca no demuestra que hubo
+> validación, demuestra que no la hubo— y la **tabla de deuda conocida** declara lo que no está
+> resuelto, por qué, y cuándo se abordará.
+
 > **Sobre el historial de commits.** Esta rama recoge el estado del producto, no su historia: el
 > desarrollo ocurrió en el repositorio privado, donde cada tarea tiene su brief, su implementación,
 > su informe de verificación y su entrada en el libro mayor (`.superpowers/sdd/`, incluido en este
