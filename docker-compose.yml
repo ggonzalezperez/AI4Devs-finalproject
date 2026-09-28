@@ -1,6 +1,12 @@
 services:
   postgres:
     image: postgres:16-alpine
+    # Vuelve solo tras un reinicio o un corte de luz. Sin esto, la politica es
+    # `no`: Docker arranca al iniciar la maquina pero los contenedores se quedan
+    # parados. En la demo publica eso deja el tunel en pie anunciando un origen
+    # que no responde, asi que el visitante ve un error del CDN en lugar de la
+    # web: parece que funciona y no funciona.
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-chispa}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?define POSTGRES_PASSWORD en .env}
@@ -15,6 +21,7 @@ services:
 
   backend:
     build: ./backend
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-chispa}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-chispa}
       JWT_SECRET: ${JWT_SECRET}
@@ -45,6 +52,7 @@ services:
       - media:/app/media
 
   frontend:
+    restart: unless-stopped
     build:
       context: ./frontend
       args:
@@ -64,6 +72,7 @@ services:
 
   ollama:
     image: ollama/ollama
+    restart: unless-stopped
     volumes:
       - ollama:/root/.ollama
     # Solo accesible desde la propia máquina (no expuesto a la red). El backend
